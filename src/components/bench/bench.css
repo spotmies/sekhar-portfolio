@@ -1,0 +1,581 @@
+/* Change Bench: the Anatomy kit's tokens mapped onto the site's stone palette.
+   Light is the default; `.dark` on <html> (ThemeToggle) switches to the dark set.
+   The one lit accent is the site accent (indigo), not the kit's white/black. */
+
+.bench.iso {
+  --anatomy-page: var(--background);
+  --anatomy-card: var(--card);
+  --anatomy-text: #57534e;
+  --anatomy-strong: #1c1917;
+  --anatomy-muted: #78716c;
+  --anatomy-paper: #ffffff;
+  --anatomy-face: #ffffff;
+  --anatomy-top: #ffffff;
+  --anatomy-shade-0: #dcd9d5;
+  --anatomy-shade-1: #e5e2df;
+  --anatomy-shade-2: #edebe8;
+  --anatomy-shade-3: #f4f3f1;
+  --anatomy-lit-top: #f4f4ff;
+  --anatomy-lit-shade: #e4e4f7;
+  --anatomy-hi: #292524;
+  --anatomy-mid: #8a8480;
+  --anatomy-lo: #b7b1ac;
+  --anatomy-faint: #dad6d2;
+  --anatomy-lit: var(--accent);
+  --anatomy-halo: #8a8178;
+  --anatomy-halo-opacity: 0.3;
+  --anatomy-dot: #44403c;
+  --anatomy-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --bench-screen: #1c1917;
+  --bench-screen-text: #e7e5e4;
+  --bench-touched-top: color-mix(in oklab, var(--accent) 12%, #ffffff);
+  margin: 0;
+}
+
+.dark .bench.iso {
+  --anatomy-text: #a8a29e;
+  --anatomy-strong: #f5f5f4;
+  --anatomy-muted: #a8a29e; /* was #78716c: 3.78:1 on the dark card; small text needs 4.5:1 (2026-11-05) */
+  --anatomy-paper: #1c1917;
+  --anatomy-face: #24201d;
+  --anatomy-top: #292522;
+  --anatomy-shade-0: #121010;
+  --anatomy-shade-1: #161412;
+  --anatomy-shade-2: #1a1715;
+  --anatomy-shade-3: #1f1c19;
+  --anatomy-lit-top: #2f2c3d;
+  --anatomy-lit-shade: #24222f;
+  --anatomy-hi: #d6d3d1;
+  --anatomy-mid: #78716c;
+  --anatomy-lo: #4a4541;
+  --anatomy-faint: #34302c;
+  --anatomy-halo: #000000;
+  --anatomy-halo-opacity: 0.75;
+  --anatomy-dot: #e7e5e4;
+  --bench-screen: #0c0a09;
+  --bench-screen-text: #d6d3d1;
+  --bench-touched-top: color-mix(in oklab, var(--accent) 16%, #292522);
+}
+
+/* card: the site's rounded border instead of the kit's square plate */
+.bench .iso-plate {
+  border-radius: 16px;
+  box-shadow: 0 0 0 1px var(--border);
+  padding: 52px 20px 48px;
+}
+.bench .iso-plate-corner {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+.bench .iso-plate-corner[data-corner="readout"] {
+  letter-spacing: 0.04em;
+}
+.bench-hint-narrow {
+  display: none;
+}
+
+/* phones: keep the figure legible and let it scroll sideways inside the card */
+.bench-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.bench-scroll::-webkit-scrollbar {
+  display: none;
+}
+@media (max-width: 640px) {
+  .bench .iso-plate {
+    padding: 40px 4px 56px;
+  }
+  .bench .iso-plate-corners {
+    inset: 16px 14px;
+  }
+  .bench .iso-plate-corner[data-corner="title"] {
+    display: none;
+  }
+  .bench .iso-plate-corner[data-corner="hint"] {
+    top: 0;
+    bottom: auto;
+    right: 0;
+    left: auto;
+  }
+  .bench .iso-plate-corner[data-corner="readout"] {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    white-space: normal;
+    font-size: 10.5px;
+    line-height: 1.45;
+  }
+  .bench-hint-wide {
+    display: none;
+  }
+  .bench-hint-narrow {
+    display: inline;
+  }
+}
+
+.bench-stage {
+  outline: none;
+  border-radius: 10px;
+}
+.bench-stage:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.bench-legend {
+  margin-top: 14px;
+  color: var(--muted);
+}
+.bench-legend .iso-caption {
+  max-width: 72ch;
+}
+
+/* the figure's own marks */
+.bench-pulse {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-dasharray: 0 100000;
+  vector-effect: none !important;
+}
+.bench-led {
+  fill: var(--anatomy-faint);
+  transition: fill 240ms var(--anatomy-ease);
+}
+.bench-led[data-on] {
+  fill: var(--accent);
+}
+.bench-ink {
+  fill: var(--accent);
+  opacity: 0.45;
+  stroke: none;
+}
+.bench-screen {
+  fill: var(--bench-screen);
+  stroke: none;
+}
+.bench-screen-text {
+  fill: var(--bench-screen-text);
+  font-family: var(--anatomy-mono);
+  letter-spacing: 0.08em;
+  transition: fill 400ms var(--anatomy-ease);
+}
+.bench-screen-text[data-fresh] {
+  fill: var(--accent);
+  transition: none;
+}
+
+/* parts the change touches: the accent edge and a tinted top */
+[data-part^="part-"] .iso-edge,
+[data-pin] .iso-edge {
+  transition: stroke 300ms var(--anatomy-ease);
+}
+[data-part^="part-"] .iso-top,
+[data-pin] .iso-top {
+  transition: fill 300ms var(--anatomy-ease);
+}
+[data-part^="part-"][data-on] .iso-edge,
+[data-pin][data-on] .iso-edge {
+  stroke: var(--accent);
+}
+[data-part^="part-"][data-on] .iso-top,
+[data-pin][data-on] .iso-top {
+  fill: var(--bench-touched-top);
+}
+[data-part^="part-"][data-hover] .iso-edge {
+  stroke: var(--anatomy-strong);
+}
+
+.bench-hit {
+  fill: transparent;
+  stroke: none;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bench-led,
+  .bench-screen-text,
+  [data-part^="part-"] .iso-edge,
+  [data-part^="part-"] .iso-top {
+    transition: none;
+  }
+}
+
+/* ============================================================================================
+   Fig 03 — Rover assembly: a pinned 3D studio, the story in an information panel beside it
+   ============================================================================================ */
+
+.asm-track {
+  position: relative;
+  margin-top: 1.5rem;
+}
+/* the pinned box is as tall as its content; the page script centres it on screen via `top` */
+.asm-sticky {
+  position: sticky;
+  top: 76px;
+}
+.asm-figure {
+  width: 100%;
+}
+.asm-figure .iso-plate {
+  padding: 0;
+  overflow: hidden;
+  /* no card, no mat: the rover floats directly on the page background (no fill, border or radius) */
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  --anatomy-paper: var(--background);
+}
+.asm-figure .iso-plate-corners {
+  z-index: 3;
+}
+.asm-figure[data-done] [data-corner="readout"] {
+  color: var(--accent);
+}
+
+/* the 3D viewport */
+.asm-viewport {
+  position: relative;
+}
+.rover-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10; /* sized to the model, not to the window: no empty band above it */
+  max-height: calc(100vh - 120px);
+  min-height: 320px;
+}
+.rover-stage canvas {
+  outline: none;
+}
+
+/* the information panel: under the viewport by default, beside the rover on wide stages */
+/* the panel is a soft card with an even hairline border, so the story reads as clearly as the model */
+.asm-panel {
+  position: relative;
+  margin: 6px 20px 0;
+  padding: 22px 24px 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--card) 72%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 18px 44px -26px rgba(0, 0, 0, 0.45);
+}
+/* a short, gentle glow each time a new step arrives */
+.asm-panel[data-flash] {
+  animation: asm-panel-flash 1100ms var(--ease-std);
+}
+@keyframes asm-panel-flash {
+  0% {
+    border-color: color-mix(in oklab, var(--accent) 70%, var(--border));
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 22%, transparent), 0 18px 44px -20px color-mix(in oklab, var(--accent) 55%, transparent);
+  }
+  100% {
+    border-color: var(--border);
+    box-shadow: 0 18px 44px -26px rgba(0, 0, 0, 0.45);
+  }
+}
+.asm-viewport:not([data-side]) .asm-panel {
+  margin-bottom: 22px;
+}
+.asm-viewport[data-side] .asm-panel {
+  position: absolute;
+  z-index: 2;
+  left: 24px;
+  top: 50%;
+  width: 340px;
+  margin: 0;
+  transform: translateY(-50%);
+}
+/* step transitions: the outgoing statement lifts away while the new one rises in, part by part */
+.asm-panel-stack {
+  display: grid;
+}
+.asm-panel-step {
+  grid-area: 1 / 1;
+}
+.asm-panel-step[data-state="sizer"] {
+  visibility: hidden;
+}
+.asm-panel-step[data-state="out"] {
+  pointer-events: none;
+  animation: asm-step-out 340ms var(--ease-std) forwards;
+}
+.asm-panel-step[data-state="in"] .asm-rise {
+  animation: asm-rise 620ms var(--ease-std) both;
+  animation-delay: var(--d, 0ms);
+}
+.asm-rise {
+  display: block;
+}
+@keyframes asm-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+@keyframes asm-step-out {
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+/* the big number rises through a mask, like a counter turning over */
+.asm-panel-num {
+  display: block;
+  overflow: hidden;
+  padding-top: 4px;
+}
+.asm-panel-step[data-state="in"] .asm-panel-num .asm-rise {
+  animation-name: asm-num-in;
+  animation-duration: 680ms;
+}
+@keyframes asm-num-in {
+  from {
+    opacity: 0;
+    transform: translateY(70%);
+  }
+}
+.asm-panel-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.asm-panel-num {
+  font-family: var(--font-serif);
+  font-size: 64px;
+  line-height: 0.8;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.asm-panel-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 2px;
+  font-family: var(--anatomy-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--anatomy-muted);
+}
+.asm-panel-of {
+  letter-spacing: 0.12em; /* opacity 0.75 removed: it dropped this 10.5px text below 4.5:1 (2026-11-05) */
+}
+.asm-panel-title {
+  margin-top: 18px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-transform: uppercase;
+  color: var(--foreground);
+}
+.asm-panel-body {
+  margin-top: 8px;
+  max-width: 34ch;
+  font-size: 16px;
+  line-height: 1.6;
+  color: color-mix(in oklab, var(--foreground) 74%, var(--muted));
+  text-wrap: pretty;
+}
+/* seven short segments: where you are in the story (a gap between the two groups) */
+.asm-panel-track {
+  display: flex;
+  gap: 4px;
+  margin-top: 20px;
+}
+.asm-panel-track span {
+  position: relative;
+  flex: 1;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--border);
+  transition: height 300ms var(--ease-std);
+}
+.asm-panel-track span[data-gap] {
+  margin-left: 10px;
+}
+.asm-panel-track span[data-on] {
+  height: 4px;
+  margin-top: -0.5px;
+}
+.asm-panel-track i {
+  position: absolute;
+  inset: 0;
+  transform: scaleX(0);
+  transform-origin: left center;
+  border-radius: inherit;
+  background: color-mix(in oklab, var(--accent) 45%, var(--border));
+  transition: transform 260ms var(--ease-std), background-color 300ms var(--ease-std);
+}
+.asm-panel-track span[data-on] i {
+  background: var(--accent);
+}
+.asm-panel-remaining {
+  margin-top: 10px;
+  font-family: var(--anatomy-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--anatomy-muted);
+}
+
+/* compact position rail */
+.asm-rail {
+  position: absolute;
+  z-index: 3;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  white-space: nowrap;
+}
+.asm-rail-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.asm-rail-label {
+  margin-right: 6px;
+  font-family: var(--anatomy-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--anatomy-muted);
+}
+.asm-rail-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-family: var(--anatomy-mono);
+  font-size: 10px;
+  color: var(--anatomy-muted);
+  cursor: pointer;
+  transition: color 240ms var(--ease-std), background-color 240ms var(--ease-std);
+}
+.asm-rail-dot:hover {
+  color: var(--foreground);
+}
+.asm-rail-dot[data-past] {
+  color: var(--anatomy-text);
+}
+.asm-rail-dot[data-on] {
+  color: #ffffff;
+}
+.asm-rail-pill {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  left: 0;
+  height: 22px;
+  width: 26px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 4px 14px -4px color-mix(in oklab, var(--accent) 70%, transparent);
+  transition: transform 520ms var(--ease-std), width 520ms var(--ease-std);
+}
+.asm-rail-group,
+.asm-rail-dot {
+  position: relative;
+  z-index: 1;
+}
+.asm-rail-dot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* tablet */
+@media (max-width: 1023px) {
+  .rover-stage {
+    max-height: calc(100vh - 380px);
+    min-height: 300px;
+  }
+  .asm-panel-num {
+    font-size: 44px;
+  }
+}
+@media (max-width: 900px) {
+  .asm-rail-label {
+    display: none;
+  }
+  .asm-figure .iso-plate-corner[data-corner="title"] {
+    display: none;
+  }
+}
+/* phones */
+@media (max-width: 640px) {
+  .asm-sticky {
+    top: 64px;
+  }
+  .asm-figure .iso-plate {
+    padding: 0;
+  }
+  .asm-rail {
+    top: 12px;
+    left: auto;
+    right: 10px;
+    transform: none;
+    gap: 6px;
+  }
+  .asm-rail-dot {
+    min-width: 22px;
+    height: 20px;
+    font-size: 9px;
+  }
+  .asm-rail-pill {
+    height: 20px;
+  }
+  .rover-stage {
+    aspect-ratio: auto;
+    height: min(48vh, 86vw);
+    min-height: 250px;
+  }
+  .asm-panel {
+    margin: 4px 16px 0;
+    padding: 16px 18px 15px;
+  }
+  .asm-panel-head {
+    padding-bottom: 10px;
+  }
+  .asm-panel-num {
+    font-size: 36px;
+  }
+  .asm-panel-title {
+    margin-top: 12px;
+  }
+  .asm-panel-body {
+    font-size: 14px;
+  }
+  .asm-panel-track {
+    margin-top: 14px;
+  }
+  .asm-figure .iso-plate-corner[data-corner="hint"] {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .asm-panel[data-flash],
+  .asm-panel-step[data-state="in"] .asm-rise,
+  .asm-panel-step[data-state="out"] {
+    animation: none;
+  }
+  .asm-panel-step[data-state="out"] {
+    visibility: hidden;
+  }
+  .asm-rail-pill,
+  .asm-panel-track i {
+    transition: none;
+  }
+}

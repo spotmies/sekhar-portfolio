@@ -1035,7 +1035,7 @@ const Lanyard = ({
     const mouth = new THREE.Vector3();
     const tuck = new THREE.Vector3();
     const curve = new THREE.CatmullRomCurve3(controls, false, 'centripetal');
-    const view = { width: 1, height: 1 };
+    const view = { width: 1, height: 1, worldHeight: 1 };
     let layout = cardLayout('portrait', 0.3);
     let applied: Applied = {};
     let strapScale = STRAP_WIDTH;
@@ -1087,6 +1087,7 @@ const Lanyard = ({
       const minimumWidth = layout.width / 0.72;
       if (viewHeight * aspect < minimumWidth) viewHeight = minimumWidth / aspect;
       const viewWidth = viewHeight * aspect;
+      view.worldHeight = viewHeight;
       camera.aspect = aspect;
       camera.position.set(0, 0, viewHeight / 2 / Math.tan((FOV * Math.PI) / 360));
       camera.lookAt(0, 0, 0);
@@ -1375,9 +1376,32 @@ const Lanyard = ({
       start();
     };
 
+    // While dragging, keep the pointer target inside the part of the canvas that is on screen, inset by
+    // how far the card reaches from the grabbed point, so the card can't be pulled out of view.
+    const clampToVisible = (event: Point): Point => {
+      const grab = sim.grab;
+      if (!grab) return event;
+      const rect = canvas.getBoundingClientRect();
+      const scale = view.height / view.worldHeight; // CSS px per world unit at the card's depth
+      const halfW = (layout.width / 2) * scale;
+      const halfH = (layout.height / 2) * scale;
+      const lx = clamp(grab.local.x * scale, -halfW, halfW);
+      const ly = clamp(grab.local.y * scale, -halfH, halfH); // + is up on the card
+      // A dragged card tilts, so to the sides and below allow for its full reach from the grabbed point.
+      // Above it only needs its upright height: it hangs from where it is held.
+      const reach = Math.hypot(halfW + Math.abs(lx), halfH + Math.abs(ly));
+      const pad = 8;
+      const fit = (value: number, min: number, max: number) => (min > max ? (min + max) / 2 : clamp(value, min, max));
+      const left = Math.max(rect.left, 0) + reach + pad;
+      const right = Math.min(rect.right, document.documentElement.clientWidth) - reach - pad;
+      const top = Math.max(rect.top, 0) + (halfH - ly) + pad;
+      const bottom = Math.min(rect.bottom, window.innerHeight) - reach - pad;
+      return { clientX: fit(event.clientX, left, right), clientY: fit(event.clientY, top, bottom) };
+    };
+
     const onPointerMove = (event: PointerEvent) => {
       if (!settingsRef.current!.interactive) return;
-      toPointer(event);
+      toPointer(sim.grab ? clampToVisible(event) : event);
       if (sim.grab) {
         if (press && Math.hypot(event.clientX - press.x, event.clientY - press.y) > 6) press = null;
         raycaster.ray.at(sim.grab.reach, sim.grab.target);

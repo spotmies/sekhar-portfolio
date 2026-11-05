@@ -1,0 +1,1018 @@
+"use client";
+
+import * as React from "react";
+import { timeline, trackRecord, type TimelinePage, type TimelineSpread } from "@/data/portfolio";
+import { ArrowUpRight } from "@/components/HoverIcons";
+
+/**
+ * Ventures as a book whose opening is tied to scroll position (cover styling
+ * borrowed from the perspective-book component: spine sheen, layered shadows).
+ * --p goes 0 → 1 as the book travels up the viewport: 0 = closed and centred,
+ * 1 = open spread (Spotmies left, Reaidy right). Scrolling back closes it.
+ *
+ * Timeline (addendum-02 §1), >= 1024px: once open, the book pins (position: sticky inside a tall wrapper,
+ * native scrolling, ~100vh of scroll per turn) and the leaves turn one at a time, back in time; after the
+ * last one it releases to #experience. Leaf k is two faces hinged on the spine that share --tk (0 → 1):
+ * its front on the right half (the Reaidy page is leaf 1's front) and its back on the left half.
+ * Only the leaf that is turning and the pages next to it are visible; the rest are visibility: hidden.
+ * Below 1024px it is a one-page book: the cover opens, the book pins and each page turns over the left spine.
+ * Only transform/opacity change; the CSS variables are written once per animation frame.
+ * With reduced motion (or without JS) the book is simply open and the spreads stack, unpinned.
+ */
+
+const S = trackRecord.spotmies;
+const R = trackRecord.reaidy;
+const TL: TimelineSpread[] = timeline.spreads; // widened: every spread may hold one or two entries
+const TURNS = TL.length; // leaves that turn after the opening spread (one per timeline spread)
+// Leaves below 1024px, in reading order: the opening spread's two pages, then each half of every period.
+// Each timeline spread is two leaves there: one entry per half, or the same entry on both halves.
+const SLIDES = [S.name, R.name, ...TL.flatMap((p) => [p.entries[0].title, (p.entries[1] ?? p.entries[0]).title])];
+// Spreads above 1024px, for the progress readout.
+const SPREADS = [`${S.name} · ${R.name}`, ...TL.map((p) => p.years ?? p.title)];
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+const ease = (x: number) => x * x * (3 - 2 * x); // ease in/out
+// Leaf k (1-based) turns in the middle 70% of its screen of scrolling, so each spread rests a moment.
+const leafT = (t: number, k: number) => ease(clamp01((t - (k - 1) - 0.15) / 0.7));
+
+// Paper grain: tiny inline SVG noise, no network request.
+const GRAIN =
+  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.11 0 0 0 0 0.1 0 0 0 0 0.09 0 0 0 0.12 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")";
+
+// Paper fibres (long, thin streaks) and a faint mottle, both inline SVG noise, no network request.
+const FIBRES =
+  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='420' height='420'><filter id='f'><feTurbulence type='fractalNoise' baseFrequency='.012 .55' numOctaves='3' seed='7' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.38 0 0 0 0 0.26 0 0 0 0.16 -0.04'/></filter><rect width='100%' height='100%' filter='url(%23f)'/></svg>\")";
+const MOTTLE =
+  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='640' height='640'><filter id='m'><feTurbulence type='fractalNoise' baseFrequency='.006' numOctaves='2' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.55 0 0 0 0 0.46 0 0 0 0 0.3 0 0 0 0.12 -0.02'/></filter><rect width='100%' height='100%' filter='url(%23m)'/></svg>\")";
+
+const CSS = `
+.vb{--p:1;--s:0;${Array.from({ length: TURNS }, (_, i) => `--t${i + 1}:0;--s${i + 1}:0`).join(";")}}
+.vb-stick{perspective:2000px;perspective-origin:50% 0%}
+.vb-pinspace{display:none}
+.vb-book{position:relative;will-change:transform;transform-style:preserve-3d}
+.vb-grid{transform-style:preserve-3d}
+.vb-cover{position:absolute;inset:0;z-index:2;transform-origin:50% 0;backface-visibility:hidden;-webkit-backface-visibility:hidden;will-change:transform;
+  transform:rotateX(calc(var(--p) * 180deg)) translateZ(1px);
+  border-radius:16px;overflow:hidden;background:#1c1917;color:#fafaf9;
+  box-shadow:0 2px 4px rgba(0,0,0,.06),0 12px 24px rgba(0,0,0,.12),inset 0 0 0 1px rgba(250,250,249,.1)}
+/* the cover darkens as it lifts away from the light */
+.vb-cover::after{content:"";position:absolute;inset:0;background:#000;opacity:calc(var(--p) * .7);pointer-events:none}
+.vb-sheen{position:absolute;left:0;top:0;bottom:0;width:6%;min-width:22px;opacity:.4;
+  background:linear-gradient(90deg,hsla(0,0%,100%,0),hsla(0,0%,100%,0) 12%,hsla(0,0%,100%,.25) 29.25%,hsla(0,0%,100%,0) 50.5%,hsla(0,0%,100%,0) 75.25%,hsla(0,0%,100%,.25) 91%,hsla(0,0%,100%,0)),linear-gradient(90deg,rgba(0,0,0,.03),rgba(0,0,0,.1) 12%,transparent 30%,rgba(0,0,0,.02) 50%,rgba(0,0,0,.2) 73.5%,rgba(0,0,0,.5) 75.25%,rgba(0,0,0,.15) 85.25%,transparent)}
+.vb-cover[data-done]{visibility:hidden}
+
+/* paper pages: the site's own stone palette (founder: the book must match the UI). Light ink in both themes. */
+.vb{--pg-a:#e6dfcf;--pg-b:#f8f4ea}
+.dark .vb{--pg-a:#cdc4b1;--pg-b:#ebe4d4}
+.vb-paper{--foreground:#1c1917;--muted:#57534e;--border:rgba(28,25,23,.12);--accent:#4f46e5;color:var(--foreground);
+  --paper:#f8f4ea;background-color:var(--paper);
+  background-image:radial-gradient(120% 95% at 50% 45%,transparent 55%,rgba(120,98,62,.10)),${FIBRES},${MOTTLE},${GRAIN};
+  background-size:100% 100%,420px,640px,160px;
+  box-shadow:inset 0 0 0 1px rgba(28,25,23,.08)}
+/* book details: running head at the top, page number at the bottom */
+.vb-head,.vb-folio{position:absolute;font-family:var(--font-geist-mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);opacity:.75;pointer-events:none}
+.vb-head{top:14px}
+.vb-folio{bottom:12px;font-family:var(--font-instrument-serif);font-size:15px;letter-spacing:0;text-transform:none}
+/* hardcover board: a thin dark edge around the page block */
+.vb-board,.vb-board-l{position:absolute;inset:-9px;border-radius:22px;pointer-events:none;transform:translateZ(-3px);
+  background:#1c1917;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),inset 0 0 0 1px rgba(255,255,255,.04)}
+.vb-board-l{display:none}
+.dark .vb-paper{--paper:#ebe4d4}
+.vb-paper::after,.vb-paper::before{content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit}
+.vb-left::after{background:linear-gradient(90deg,rgba(255,255,255,.25),transparent 12%,transparent 82%,rgba(28,25,23,.16))}
+.vb-right::after{background:linear-gradient(90deg,rgba(28,25,23,.18),transparent 16%,transparent 90%,rgba(255,255,255,.2))}
+.vb-spine{opacity:clamp(0, calc((var(--p) - .6) * 2.5), 1)}
+/* the fold: a crease down the gutter, dark at the centre with a thin highlight either side */
+.vb-crease{opacity:clamp(0, calc((var(--p) - .6) * 2.5), 1);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.35) 38%,rgba(28,25,23,.35) 49%,rgba(28,25,23,.5) 50%,rgba(28,25,23,.35) 51%,rgba(255,255,255,.3) 62%,transparent)}
+.vb-shadow{position:absolute;inset:0;border-radius:18px;box-shadow:0 24px 48px -22px rgba(0,0,0,.22),0 6px 14px -6px rgba(0,0,0,.1);pointer-events:none;transform:translateZ(-2px)}
+.vb-shadow-l{display:none}
+
+/* Phones and tablets (< 1024px): a one-page book (founder, 2026-11-05: book animation like desktop, not slides;
+   a two-page spread is too narrow on a phone). Without the data-mbook flag (reduced motion, no JS) the pages
+   simply stack. With it (set from JS): the cover flips open as the book arrives, then the book pins under the
+   nav; a page taller than the screen first scrolls up inside the book, then turns over the left spine onto the
+   next one. A timeline period is one page: its two halves stacked. */
+@media (max-width:1023px){
+  .vb-cover,.vb-board,.vb-board-l,.vb-shadow,.vb-shadow-l{display:none}
+  .vb-book{transform:none}
+  .vb-grid{display:flex;flex-direction:column;gap:16px}
+  .vb-left::after,.vb-right::after{background:linear-gradient(90deg,rgba(28,25,23,.14),transparent 9%,transparent 92%,rgba(255,255,255,.18))}
+  .vb-left,.vb-right,.vb-spread{box-shadow:inset 0 0 0 1px rgba(28,25,23,.08),1px 1px 0 var(--pg-a),2px 2px 0 var(--pg-b),3px 3px 0 var(--pg-a),4px 4px 0 var(--pg-b),0 10px 18px -10px rgba(0,0,0,.35)}
+  .vb-spread{display:flex;flex-direction:column;border-radius:16px;overflow:hidden}
+  .vb-half{flex:1}
+  .vb-hl{border-bottom:1px solid rgba(28,25,23,.08)}
+
+  .vb[data-mbook] .vb-stick{position:sticky;top:0!important;height:100svh;overflow:hidden;padding-top:76px;perspective:1600px;perspective-origin:50% 40%}
+  /* the page area; pages are stacked in it, the first on top (z-index from JS); the leaf hinges on its left edge */
+  .vb[data-mbook] .vb-grid{display:block;position:relative;height:calc(100svh - 76px - 60px);transform-style:flat;perspective:1400px;perspective-origin:30% 35%;
+    clip-path:inset(-100vh -100vw 0 -100vw)} /* a long page is cut at the bottom of the page area, like a window */
+  /* every page is one leaf: Spotmies, Reaidy, then each half of a timeline spread on its own (founder, 2026-11-05:
+     later pages must turn like the first two, without the next half showing under them) */
+  .vb[data-mbook] .vb-spread{display:contents}
+  /* Every page fits the page area, so each one simply turns (founder, 2026-11-05: pages that first scrolled up,
+     then turned, felt like a double scroll). Tighter padding on the book's pages; a page still taller than the
+     area is laid out a little wider and scaled down to fit (--fit, from JS), so its layout doesn't change. */
+  .vb[data-mbook] .vb-grid>article:not(.vb-spread),.vb[data-mbook] .vb-spread>.vb-half{position:absolute;top:0;left:0;
+    width:calc(100% / var(--fit,1));min-height:calc(100% / var(--fit,1));
+    border:0;border-radius:calc(16px / var(--fit,1));transform-origin:0 0;will-change:transform;
+    box-shadow:inset 0 0 0 1px rgba(28,25,23,.08),1px 1px 0 var(--pg-a),2px 2px 0 var(--pg-b),3px 3px 0 var(--pg-a),4px 4px 0 var(--pg-b),0 10px 18px -10px rgba(0,0,0,.35);
+    transform:translate3d(0,calc(var(--y,0) * -1px),0) rotateY(calc(var(--r,0) * -180deg)) scale(var(--fit,1));backface-visibility:hidden;-webkit-backface-visibility:hidden}
+  .vb[data-mbook] .vb-grid>article:not(.vb-spread){gap:14px;padding-top:36px;padding-bottom:36px}
+  .vb[data-mbook] .vb-spread>.vb-half{padding-top:40px;padding-bottom:40px}
+  /* the turning leaf's shadow falls across the page beneath it (opacity only) */
+  .vb[data-mbook] .vb-grid>article:not(.vb-spread)::before,.vb[data-mbook] .vb-spread>.vb-half::before{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;border-radius:inherit;
+    background:linear-gradient(90deg,rgba(28,25,23,.4),rgba(28,25,23,.14) 45%,transparent 85%);opacity:var(--msh,0)}
+  .vb[data-mbook] [data-off]{visibility:hidden}
+  /* the cover opens sideways on the spine, like the pages (founder, 2026-11-05: it flipped up before) */
+  .vb[data-mbook] .vb-cover{display:block;transform-origin:0 50%;border-radius:6px 16px 16px 6px;
+    transform:rotateY(calc(var(--p) * -180deg)) translateZ(1px)}
+  .vb[data-mbook] .vb-pinspace{display:block;height:var(--mspace,0px)}
+  .vb[data-mbook] .vb-mrow{display:flex}
+}
+@media (min-width:1024px){
+  /* closed: book centred on the cover; it slides into place as it opens */
+  .vb-book{transform:translateX(calc((1 - var(--p)) * -25%))}
+  /* one rigid leaf hinged on the spine: front = cover, back = the Spotmies page */
+  .vb-cover{left:50%;transform-origin:0 50%;border-radius:6px 16px 16px 6px;transform:rotateY(calc(var(--p) * -180deg)) translateZ(1px)}
+  .vb-left{transform-origin:100% 50%;transform:rotateY(calc((1 - var(--p)) * 180deg)) translateZ(1px);
+    backface-visibility:hidden;-webkit-backface-visibility:hidden;will-change:transform}
+  .vb-left::before{z-index:1;background:#000;opacity:calc((1 - var(--p)) * .8)}
+  /* the turning leaf casts a shadow across the right page, strongest when upright */
+  .vb-right::before{z-index:1;background:linear-gradient(90deg,rgba(28,25,23,.38),rgba(28,25,23,.12) 45%,transparent 80%);opacity:var(--s)}
+  /* page block edges: the book has thickness */
+  /* page block: the stack of pages shows along the outer side and the bottom of each half */
+  .vb-right,.vb-pr{box-shadow:inset 0 0 0 1px rgba(28,25,23,.08),1px 1px 0 var(--pg-a),2px 2px 0 var(--pg-b),3px 3px 0 var(--pg-a),4px 4px 0 var(--pg-b),5px 5px 0 var(--pg-a),6px 6px 0 var(--pg-b),7px 7px 3px rgba(0,0,0,.12)}
+  .vb-left,.vb-pl{box-shadow:inset 0 0 0 1px rgba(28,25,23,.08),-1px 1px 0 var(--pg-a),-2px 2px 0 var(--pg-b),-3px 3px 0 var(--pg-a),-4px 4px 0 var(--pg-b),-5px 5px 0 var(--pg-a),-6px 6px 0 var(--pg-b),-7px 7px 3px rgba(0,0,0,.12)}
+  /* board in two halves like the shadow: the left half appears once the Spotmies page has landed */
+  .vb-board{left:50%;right:-12px;top:-10px;bottom:-14px;border-radius:6px 20px 20px 6px}
+  .vb-board-l{display:block;left:-12px;right:50%;top:-10px;bottom:-14px;border-radius:20px 6px 6px 20px;opacity:clamp(0, calc((var(--p) - .92) * 12.5), 1)}
+  /* Shadow in two halves. The right half (under the cover / Reaidy page) is always there; the left half only
+     fades in once the Spotmies page has landed. One full-width shadow outlined an empty "white card" on the
+     left while the page was still turning (visible in light mode). */
+  .vb-shadow{left:50%;border-radius:6px 18px 18px 6px}
+  .vb-shadow-l{display:block;position:absolute;top:0;bottom:0;left:0;right:50%;border-radius:18px 6px 6px 18px;box-shadow:0 24px 48px -22px rgba(0,0,0,.22),0 6px 14px -6px rgba(0,0,0,.1);
+    pointer-events:none;transform:translateZ(-2px);opacity:clamp(0, calc((var(--p) - .92) * 12.5), 1)}
+  /* open spread: each page curves down into the gutter (shade deepens over the last ~14%), with a soft
+     highlight where the page bends, and lifts slightly at its outer edge */
+  .vb-left::after,.vb-pl::after{background:
+    linear-gradient(90deg,rgba(255,255,255,.28),transparent 7%),
+    linear-gradient(90deg,transparent 78%,rgba(255,255,255,.18) 84%,rgba(28,25,23,.08) 90%,rgba(28,25,23,.22) 96%,rgba(28,25,23,.38))}
+  .vb-right::after,.vb-pr::after{background:
+    linear-gradient(270deg,rgba(255,255,255,.28),transparent 7%),
+    linear-gradient(270deg,transparent 78%,rgba(255,255,255,.18) 84%,rgba(28,25,23,.08) 90%,rgba(28,25,23,.22) 96%,rgba(28,25,23,.38))}
+  .vb-pl{border-radius:16px 0 0 16px}
+  .vb-pr{border-radius:0 16px 16px 0}
+}
+
+/* ---------- Timeline leaves (addendum-02 §1) ---------- */
+/* soft shadow from the leaf passing over a page (opacity only): --sh is that leaf's sin(pi * t) */
+.vb-pl::before,.vb-pr::before{z-index:1;opacity:var(--sh,0)}
+.vb-pr::before{background:linear-gradient(90deg,rgba(28,25,23,.38),rgba(28,25,23,.12) 45%,transparent 80%)}
+.vb-pl::before{background:linear-gradient(270deg,rgba(28,25,23,.3),rgba(28,25,23,.1) 45%,transparent 80%)}
+@media (min-width:1024px) and (prefers-reduced-motion:no-preference){
+  /* the pin: a spacer after the book adds ~100vh of scroll per turn; the book sticks while it is used up
+     (a sticky element cannot move into its parent's padding, so this must be content, not padding) */
+  .vb-pinspace{display:block;height:calc(var(--turns) * 100vh)}
+  .vb-stick{position:sticky;top:72px}
+  .vb-spread{position:absolute;inset:0;transform-style:preserve-3d;pointer-events:none}
+  .vb-half{position:absolute;top:0;bottom:0;width:50%;pointer-events:auto;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+  /* back of a leaf (left half) and front of a leaf (right half), both hinged on the spine */
+  .vb-hl{left:0;transform-origin:100% 50%;transform:rotateY(calc((1 - var(--t)) * 180deg)) translateZ(var(--z))}
+  .vb-hr{left:50%;transform-origin:0 50%;transform:rotateY(calc(var(--t,0) * -180deg)) translateZ(var(--z))}
+  /* the Reaidy page is the front of leaf 1; it stays just under the cover (1px) */
+  .vb-right{transform-origin:0 50%;transform:rotateY(calc(var(--t1) * -180deg)) translateZ(.8px);backface-visibility:hidden;-webkit-backface-visibility:hidden}
+  .vb [data-off]{visibility:hidden}
+}
+`;
+
+// Reduced motion (and no JS): no pin, no turning; every spread stacked under the first, in order.
+const STACKED = `
+.vb-pinspace{display:none!important}
+.vb-stick{position:static!important}
+.vb-spread{position:relative!important;inset:auto!important;grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;margin-top:32px;pointer-events:auto!important}
+.vb-half{position:relative!important;left:auto!important;width:auto!important;min-height:20rem;transform:none!important;visibility:visible!important}
+.vb-right{transform:none!important;visibility:visible!important}
+.vb-left{visibility:visible!important}
+.vb-tl-ind{display:none}
+`;
+const CSS_ALL = CSS + `@media (min-width:1024px) and (prefers-reduced-motion:reduce){${STACKED}}`;
+
+// Three text styles on the paper (user decision): serif = names, numbers, quote;
+// sans = body (same size/grey as other sections); uppercase mono = small labels.
+const label = "font-mono text-[11px] leading-relaxed tracking-[0.16em] text-muted uppercase";
+const body = "text-[15px] leading-relaxed";
+
+/* ---------- Hand-drawn graphs (pencil on graph paper) ----------
+   Only figures with the same unit share a chart. Values are the real figures (lower bounds, "40+").
+   Deterministic wobble (seeded), so server and client render the same SVG. */
+
+type Bar = { label: string; value: string };
+const num = (v: string) => {
+  const n = parseFloat(v.replace(/[^0-9.]/g, ""));
+  return /k/i.test(v) ? n * 1000 : n;
+};
+function rng(seed: number) {
+  let s = seed;
+  return () => {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280 - 0.5;
+  };
+}
+// a pencil line: slightly bowed, ends overshoot a little
+function pencil(r: () => number, x1: number, y1: number, x2: number, y2: number, j = 1.2) {
+  const f = (v: number) => v.toFixed(1);
+  const mx = (x1 + x2) / 2 + r() * j * 2;
+  const my = (y1 + y2) / 2 + r() * j * 2;
+  return `M${f(x1 + r() * j)},${f(y1 + r() * j)} Q${f(mx)},${f(my)} ${f(x2 + r() * j)},${f(y2 + r() * j)}`;
+}
+
+function SketchBars({ bars, seed, w = 300, h = 168 }: { bars: Bar[]; seed: number; w?: number; h?: number }) {
+  const r = rng(seed);
+  // drawn at roughly the size it is shown, so the pencil text stays readable
+  const W = w;
+  const H = h;
+  const left = 20;
+  const base = H - 44;
+  const top = 30;
+  const max = Math.max(...bars.map((b) => num(b.value)));
+  const slot = (W - left - 14) / bars.length;
+  const bw = Math.min(46, slot * 0.46);
+  const id = "vbh" + seed;
+  const f = (v: number) => v.toFixed(1);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" aria-hidden="true">
+      <defs>
+        <pattern id={id} width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(38)">
+          <line x1="0" y1="0" x2="0" y2="5" stroke="#1c1917" strokeWidth="1" opacity=".42" />
+        </pattern>
+      </defs>
+      {/* graph paper */}
+      <g stroke="#1c1917" opacity=".07">
+        {Array.from({ length: Math.floor(W / 12) + 1 }, (_, i) => (
+          <line key={"v" + i} x1={i * 12} y1="0" x2={i * 12} y2={H} />
+        ))}
+        {Array.from({ length: Math.floor(H / 12) + 1 }, (_, i) => (
+          <line key={"h" + i} x1="0" y1={i * 12} x2={W} y2={i * 12} />
+        ))}
+      </g>
+      <g fill="none" stroke="#1c1917" strokeLinecap="round" strokeLinejoin="round">
+        {/* axes */}
+        <path d={pencil(r, left, top - 12, left, base + 2, 0.8)} strokeWidth="1.3" opacity=".8" />
+        <path d={pencil(r, left - 4, base, W - 8, base, 0.8)} strokeWidth="1.3" opacity=".8" />
+        <path d={`M${left - 4},${top - 6} L${left},${top - 13} L${left + 4},${top - 6}`} strokeWidth="1.2" opacity=".7" />
+        {bars.map((b, i) => {
+          const h = Math.max(6, ((base - top) * num(b.value)) / max);
+          const x = left + slot * i + (slot - bw) / 2;
+          const y = base - h;
+          const quad = `M${f(x + r())},${f(base)} L${f(x + r())},${f(y + r())} L${f(x + bw + r())},${f(y + r())} L${f(x + bw + r())},${f(base)} Z`;
+          return (
+            <g key={b.label}>
+              <path d={quad} fill={`url(#${id})`} stroke="none" />
+              <path d={pencil(r, x, base, x, y)} strokeWidth="1.25" opacity=".85" />
+              <path d={pencil(r, x - 2, y, x + bw + 2, y)} strokeWidth="1.25" opacity=".85" />
+              <path d={pencil(r, x + bw, y, x + bw, base)} strokeWidth="1.25" opacity=".85" />
+              <text x={x + bw / 2} y={y - 7} textAnchor="middle" fill="#1c1917" stroke="none" fontFamily="var(--font-instrument-serif)" fontSize="22">
+                {b.value}
+              </text>
+              <text x={x + bw / 2} y={base + 15} textAnchor="middle" fill="#57534e" stroke="none" fontFamily="var(--font-geist-sans)" fontSize="11.5">
+                {b.label.split(" ").length > 1 ? (
+                  <>
+                    <tspan x={x + bw / 2}>{b.label.split(" ").slice(0, -1).join(" ")}</tspan>
+                    <tspan x={x + bw / 2} dy="13">{b.label.split(" ").slice(-1)}</tspan>
+                  </>
+                ) : (
+                  b.label
+                )}
+              </text>
+            </g>
+          );
+        })}
+      </g>
+    </svg>
+  );
+}
+
+/** The figures as hand-drawn graphs; a plain list stays for screen readers. */
+function Graphs({ m, kind }: { m: typeof S.metrics; kind: "spotmies" | "reaidy" }) {
+  const it = m.items;
+  const list = (
+    <dl className="sr-only">
+      {it.map((x) => (
+        <div key={x.label}>
+          <dt>{x.label}</dt>
+          <dd>{x.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+  if (kind === "spotmies") {
+    const counted = it.filter((x) => /^\d+\+$/.test(x.value));
+    const other = it.filter((x) => !/^\d+\+$/.test(x.value));
+    return (
+      <div className="border-y border-border py-4">
+        {list}
+        <SketchBars seed={11} bars={counted} w={440} h={168} />
+        {other.length > 0 && (
+          <p className="mt-1 text-right font-serif text-[17px] text-muted italic">
+            + {other.map((x) => `${x.value} ${x.label}`).join(" · ")}
+          </p>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-2 gap-2 border-y border-border py-4">
+      {list}
+      <SketchBars seed={23} bars={it.slice(0, 2)} w={220} h={168} />
+      <SketchBars seed={37} bars={it.slice(2, 4)} w={220} h={168} />
+    </div>
+  );
+}
+
+// Each page flows on its own (the old shared 7-row subgrid left big gaps wherever the facing page had a
+// taller item, and rows emptied by hidden null fields stayed blank).
+const pageCls = "vb-paper relative flex scroll-mt-24 flex-col gap-5 px-6 pt-10 pb-12 sm:px-10 sm:pt-11 sm:pb-12";
+// A timeline page (phase 1: just a year or a title), centred so it stays visible however the book is pinned.
+const halfCls = "relative flex min-h-56 flex-col items-start justify-center px-6 py-14 sm:px-10";
+
+// Logo on a small dark plate: both logos have white lettering made for dark backgrounds.
+function LogoPlate({ logo, h }: { logo: { src: string; width: number; height: number; alt: string }; h: number }) {
+  return (
+    <span className="vb-plate inline-flex self-start rounded-md bg-[#1c1917] px-3.5 py-2.5">
+      {/* eslint-disable-next-line @next/next/no-img-element -- small pre-optimised WebP, fixed size */}
+      <img
+        src={logo.src}
+        width={Math.round((logo.width / logo.height) * h)}
+        height={h}
+        alt={logo.alt}
+        loading="lazy"
+        decoding="async"
+        className="block"
+        style={{ height: h, width: "auto" }}
+      />
+    </span>
+  );
+}
+
+// Logo on the dark cover (its white lettering is made for dark backgrounds).
+function CoverLogo({ logo, h }: { logo: { src: string; width: number; height: number; alt: string }; h: number }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- small pre-optimised WebP, fixed size
+    <img
+      src={logo.src}
+      width={Math.round((logo.width / logo.height) * h)}
+      height={h}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      className="block"
+      style={{ height: h, width: "auto" }}
+    />
+  );
+}
+
+function Chips({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div>
+      <h4 className={label}>{title}</h4>
+      <ul className="mt-2.5 flex flex-wrap gap-1.5">
+        {items.map((c) => (
+          <li key={c} className="rounded-full border border-border px-2.5 py-0.5 text-[12.5px] text-muted">
+            {c}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+type TLPage = TimelinePage;
+
+/* A photo pinned to the page like a print: white border, a strip of tape, a slight tilt. Placeholders
+   (picsum stand-ins until the founder's files arrive) say so in the caption. */
+// `wide`: a 2:1 print for group photos that would lose people at the usual 45:32.
+function PagePhoto({ image, small, tilt = -1.2, wide }: { image: NonNullable<TLPage["image"]>; small?: boolean; tilt?: number; wide?: boolean }) {
+  return (
+    <figure
+      className={"vb-photo relative w-full bg-white p-2 pb-1.5 shadow-[0_8px_18px_-8px_rgba(0,0,0,.35)] " + (small ? "max-w-[300px]" : "max-w-[400px]")}
+      style={{ rotate: `${tilt}deg` }}
+    >
+      <span aria-hidden="true" className="absolute -top-2.5 left-1/2 h-5 w-20 -translate-x-1/2 rotate-[2deg] bg-[rgba(214,206,190,.75)] shadow-sm" />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={image.src} alt={image.placeholder ? "" : image.alt} loading="lazy" width={wide ? 1000 : 900} height={wide ? 500 : 640} className={"block w-full object-cover " + (wide ? "aspect-[2/1]" : "aspect-[45/32]")} />
+      <figcaption className="px-1 pt-1.5 font-mono text-[10px] leading-snug tracking-[0.08em] text-[#57534e] uppercase">
+        {image.placeholder ? "[placeholder image]" : image.alt}
+      </figcaption>
+    </figure>
+  );
+}
+
+/* Title line: linked when there's a link, with a small Draft marker until the founder approves the wording. */
+function EntryTitle({ pg, id, big }: { pg: TLPage; id?: string; big?: boolean }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <h3 id={id} className={"font-serif leading-tight " + (big ? "text-[34px] sm:text-[44px]" : "text-[28px] sm:text-[34px]")}>
+        {pg.link ? <NameLink name={pg.title} href={pg.link} /> : pg.title}
+      </h3>
+      {pg.draft && <span className={"rounded-full border border-dashed border-border px-2.5 py-0.5 " + label}>Draft</span>}
+    </div>
+  );
+}
+
+function WhatIDid({ items }: { items: string[] }) {
+  return (
+    <div>
+      <p className={label}>What I did</p>
+      <ul className="mt-2 space-y-1.5">
+        {items.map((w) => (
+          <li key={w} className={body + " flex max-w-[50ch] gap-2.5"}>
+            <span aria-hidden="true" className="mt-[0.7em] h-1 w-1 shrink-0 rounded-full bg-accent" />
+            <span>{w}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Outcome({ text }: { text: string }) {
+  return (
+    <div className="border-l-2 border-accent pl-4">
+      <p className={label}>Outcome</p>
+      <p className={body + " mt-1 max-w-[50ch]"}>{text}</p>
+    </div>
+  );
+}
+
+/* Two entries in one spread: each page tells one story in full (years, title, role, line, photo, work, outcome). */
+function EntryPage({ pg, id, tilt }: { pg: TLPage; id?: string; tilt: number }) {
+  return (
+    <div className="flex w-full flex-col gap-3.5">
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        {pg.years && <p className="font-serif text-4xl leading-none sm:text-[44px]">{pg.years}</p>}
+        {pg.type && <p className={label}>{pg.type}</p>}
+      </div>
+      <EntryTitle pg={pg} id={id} />
+      {pg.role && <p className={label}>{pg.role}</p>}
+      {pg.oneLine && <p className={body + " max-w-[46ch]"}>{pg.oneLine}</p>}
+      {pg.image && (
+        <div className="mt-2 mb-1">
+          <PagePhoto image={pg.image} small tilt={tilt} />
+        </div>
+      )}
+      {pg.whatIDid && pg.whatIDid.length > 0 && <WhatIDid items={pg.whatIDid} />}
+      {pg.outcome && <Outcome text={pg.outcome} />}
+    </div>
+  );
+}
+
+/* One entry over both pages. Left: years, type, title, role, line, photo. Right: the work and the outcome. */
+function SoloLeft({ pg, id }: { pg: TLPage; id: string }) {
+  return (
+    <div className="flex w-full flex-col gap-4">
+      {pg.years && <p className="font-serif text-5xl leading-none sm:text-6xl">{pg.years}</p>}
+      {pg.type && <p className={label}>{pg.type}</p>}
+      <EntryTitle pg={pg} id={id} big />
+      {pg.role && <p className={label}>{pg.role}</p>}
+      {pg.oneLine && <p className={body + " max-w-[46ch]"}>{pg.oneLine}</p>}
+      {pg.image &&
+        (pg.besideImage ? (
+          // Two prints side by side, tilted opposite ways (e.g. Hexagon: the layout and the etched boards).
+          <div className="mt-3 grid grid-cols-2 gap-4 sm:gap-6">
+            <PagePhoto image={pg.image} small tilt={-1.4} />
+            <PagePhoto image={pg.besideImage} small tilt={1.6} />
+          </div>
+        ) : (
+          <div className="mt-3">
+            <PagePhoto image={pg.image} />
+          </div>
+        ))}
+    </div>
+  );
+}
+
+function SoloRight({ pg }: { pg: TLPage }) {
+  return (
+    <div className="flex w-full flex-col gap-6">
+      {pg.whatIDid && pg.whatIDid.length > 0 && <WhatIDid items={pg.whatIDid} />}
+      {pg.gallery && pg.gallery.length > 0 && (
+        // Extra photos (e.g. Hexagon's boards), side by side and tilted opposite ways like prints taped in.
+        // A single extra photo gets the normal size instead of half a grid.
+        <div className={"mt-1 grid gap-4 sm:gap-6 " + (pg.gallery.length > 1 ? "grid-cols-2" : "")}>
+          {pg.gallery.map((g, i) => (
+            <PagePhoto key={g.src} image={g} small={pg.gallery!.length > 1} tilt={i % 2 ? 1.6 : -1.4} />
+          ))}
+        </div>
+      )}
+      {pg.chips && pg.chips.items.length > 0 && <Chips title={pg.chips.title} items={pg.chips.items} />}
+      {pg.outcome && <Outcome text={pg.outcome} />}
+      {pg.link && (
+        <a href={pg.link} target="_blank" rel="noopener noreferrer" className={label + " -my-1 inline-flex items-center gap-1.5 self-start py-1 underline-offset-4 hover:text-foreground hover:underline"}>
+          Visit {pg.title} <ArrowUpRight size={12} />
+        </a>
+      )}
+    </div>
+  );
+}
+
+/* Growth as two dated values (no computed %): e.g. Team 4 (2020) → 25+ (Jun 2025). */
+function GrowthLine({ g }: { g: NonNullable<typeof S.metrics.growth> }) {
+  return (
+    <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <span className={label}>{g.label} growth</span>
+      <span className="font-serif text-2xl leading-none">{g.from.value}</span>
+      <span className={label}>{g.from.date}</span>
+      <span aria-label="to" className="text-accent">→</span>
+      <span className="font-serif text-2xl leading-none">{g.to.value}</span>
+      <span className={label}>{g.to.date}</span>
+    </p>
+  );
+}
+
+export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
+  const ref = React.useRef<HTMLDivElement>(null); // root; above 1024px also the tall pin wrapper
+  const stickRef = React.useRef<HTMLDivElement>(null);
+  const bookRef = React.useRef<HTMLDivElement>(null);
+  const coverRef = React.useRef<HTMLDivElement>(null);
+  const gridRef = React.useRef<HTMLDivElement>(null);
+  const pinTop = React.useRef(72); // the sticky top in px, measured
+  const [slide, setSlide] = React.useState(0);
+  const [spread, setSpread] = React.useState(0);
+
+  // The phone/tablet book's leaves, in reading order: Spotmies, Reaidy, then each half of every timeline spread.
+  const pages = () =>
+    Array.from(
+      gridRef.current?.querySelectorAll<HTMLElement>(":scope > article:not(.vb-spread), :scope > .vb-spread > .vb-half") ?? [],
+    );
+  const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // Phones/tablets book: where each page's stretch of scrolling starts (px from the book's pin point), how far
+  // that page scrolls inside the book before it turns, and the scroll length of one turn. Measured in the effect.
+  const mSegs = React.useRef<{ start: number; read: number }[]>([]);
+  const mTurn = React.useRef(600);
+  const goTo = (i: number) => {
+    const el = ref.current;
+    const seg = mSegs.current[i];
+    if (!el || !seg) return;
+    const y = el.getBoundingClientRect().top + window.scrollY + seg.start + (i > 0 ? 2 : 0);
+    window.scrollTo({ top: y, behavior: reduceMotion() ? "auto" : "smooth" });
+  };
+
+  // Desktop: scroll to where spread n is fully shown (n = 0 is the opening spread).
+  const goToSpread = (n: number) => {
+    const el = ref.current;
+    if (!el) return;
+    const y = el.getBoundingClientRect().top + window.scrollY - pinTop.current + n * window.innerHeight;
+    window.scrollTo({ top: y, behavior: reduceMotion() ? "auto" : "smooth" });
+  };
+
+  // With focus inside the book: ←/→ or PageUp/PageDown move one page. Past either end, the key does what it
+  // normally does (PageDown scrolls on to the next section).
+  const onKey = (e: React.KeyboardEvent) => {
+    const dir = e.key === "ArrowRight" || e.key === "PageDown" ? 1 : e.key === "ArrowLeft" || e.key === "PageUp" ? -1 : 0;
+    if (!dir || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (!window.matchMedia("(min-width: 1024px)").matches) {
+      if (reduceMotion()) return; // pages are stacked: normal scrolling
+      const n = slide + dir;
+      if (n < 0 || n >= SLIDES.length) return;
+      e.preventDefault();
+      goTo(n);
+      return;
+    }
+    if (reduceMotion()) return; // spreads are stacked: normal scrolling
+    const n = spread + dir;
+    if (n < 0 || n > TURNS) return;
+    e.preventDefault();
+    goToSpread(n);
+  };
+
+  // Before paint: set --p (and the leaves) from the current scroll position (also right after a refresh).
+  React.useLayoutEffect(() => {
+    const el = ref.current;
+    const stick = stickRef.current;
+    const book = bookRef.current;
+    const cover = coverRef.current;
+    if (!el || !stick || !book || !cover) return;
+    if (reduceMotion()) {
+      cover.dataset.done = "";
+      return;
+    }
+    const lg = window.matchMedia("(min-width: 1024px)");
+    const face = (id: string) => el.querySelector<HTMLElement>(`[data-face="${id}"]`);
+    const L = Array.from({ length: TURNS + 1 }, (_, i) => face("L" + i));
+    const Rt = Array.from({ length: TURNS + 1 }, (_, i) => face("R" + i));
+    let raf = 0;
+    let curP = -1; // shown values: opening (0..1) and timeline position (0..TURNS)
+    let curT = 0;
+    let lastT = 0;
+    let shownKey = "";
+    let shownSpread = 0;
+    let curS = 0; // phones/tablets: scroll into the pinned book, px
+    let mbook = false;
+    let mTotal = 0;
+    let shownSlide = -1;
+    const grid = gridRef.current;
+
+    // Switch the phone/tablet book on or off (below 1024px; reduced motion was handled above).
+    const setMode = () => {
+      const on = !lg.matches;
+      if (on === mbook) return;
+      mbook = on;
+      shownKey = "";
+      el.querySelectorAll<HTMLElement>("[data-off]").forEach((f) => delete f.dataset.off);
+      if (on) el.dataset.mbook = "";
+      else {
+        delete el.dataset.mbook;
+        pages().forEach((pg) => {
+          pg.style.removeProperty("--y");
+          pg.style.removeProperty("--r");
+          pg.style.removeProperty("--msh");
+          pg.style.removeProperty("--fit");
+          pg.style.zIndex = "";
+        });
+      }
+    };
+
+    // Desktop: pin just under the nav if the book fits; if it is taller than the screen, pin it with its bottom
+    // 16px above the bottom of the screen instead (the turning pages' text is centred, so it stays visible).
+    // Phones/tablets: the book fills the screen under the nav; each page is scaled to fit the page area (--fit:
+    // measured at full width, then laid out 1/fit wider, which can only make it shorter, so it always fits) and
+    // gets one turn's stretch of scrolling (half a screen; the last page doesn't turn). `read` (a page scrolling
+    // up inside the book) stays as a fallback and is 0 when everything fits.
+    const measure = () => {
+      setMode();
+      if (mbook && grid) {
+        pinTop.current = 0;
+        stick.style.top = "";
+        const area = grid.clientHeight;
+        const turn = Math.round(stick.clientHeight * 0.5);
+        mTurn.current = turn;
+        let acc = 0;
+        const P = pages();
+        P.forEach((pg) => {
+          pg.style.setProperty("--fit", "1");
+          pg.style.minHeight = "0";
+        });
+        // Photos and graphs grow with the width, so a wider layout can be taller: re-measure until it fits.
+        // Never below 0.8 (smaller text gets hard to read); on very short screens the rest scrolls (`read`).
+        const fit = P.map(() => 1);
+        for (let pass = 0; pass < 4; pass++) {
+          let changed = false;
+          P.forEach((pg, i) => {
+            const f = Math.max(0.8, Math.min(fit[i], (area - 1) / pg.offsetHeight));
+            if (f < fit[i] - 0.001) {
+              fit[i] = f;
+              changed = true;
+            }
+          });
+          if (!changed) break;
+          P.forEach((pg, i) => pg.style.setProperty("--fit", fit[i].toFixed(4)));
+        }
+        P.forEach((pg) => (pg.style.minHeight = ""));
+        mSegs.current = P.map((pg, i) => {
+          const seg = { start: acc, read: Math.max(0, Math.round(pg.offsetHeight * fit[i] - area)) };
+          acc += seg.read + (i < P.length - 1 ? turn : 0);
+          return seg;
+        });
+        mTotal = acc;
+        el.style.setProperty("--mspace", mTotal + "px");
+        return;
+      }
+      pinTop.current = Math.round(Math.min(72, window.innerHeight - stick.offsetHeight - 16));
+      stick.style.top = pinTop.current + "px";
+    };
+    // Phones/tablets: the visible page scrolls up by --y, the leaf turns with --r (0 → 1), the page beneath
+    // gets the leaf's shadow (--sh). Only the current page and, while it turns, the next one are visible.
+    const paintBook = (s: number) => {
+      const P = pages();
+      const segs = mSegs.current;
+      const n = P.length;
+      const turn = mTurn.current;
+      const y = segs.map((g) => Math.min(g.read, Math.max(0, s - g.start)));
+      // The turn uses almost its whole stretch (a short rest at each end), so there's no dead scroll between pages.
+      const r = segs.map((g, i) => (i < n - 1 ? ease(clamp01(((s - g.start - g.read) / turn - 0.06) / 0.88)) : 0));
+      let cur = r.findIndex((v) => v < 1);
+      if (cur < 0) cur = n - 1;
+      P.forEach((pg, i) => {
+        const on = i === cur || (i === cur + 1 && r[cur] > 0);
+        if (on) delete pg.dataset.off;
+        else pg.dataset.off = "";
+        pg.style.zIndex = String(n - i);
+        pg.style.setProperty("--y", y[i].toFixed(1));
+        pg.style.setProperty("--r", r[i].toFixed(4));
+        pg.style.setProperty("--msh", i === cur + 1 ? Math.sin(Math.PI * r[cur]).toFixed(3) : "0");
+      });
+      const shown = Math.max(0, r.findIndex((v) => v < 0.5));
+      if (shown !== shownSlide) {
+        shownSlide = shown;
+        setSlide(shown);
+      }
+    };
+    // Opening is spread over ~80% of a screen of scrolling:
+    // closed while the book's top is below 95% of the viewport, fully open at 15%.
+    // Then, while pinned, each screen of scrolling turns one leaf.
+    const target = (): [number, number, number] => {
+      const vh = window.innerHeight;
+      const p = ease(clamp01((vh * 0.95 - book.getBoundingClientRect().top) / (vh * 0.8)));
+      const t = lg.matches ? Math.min(TURNS, Math.max(0, (pinTop.current - el.getBoundingClientRect().top) / vh)) : 0;
+      const s = mbook ? Math.min(mTotal, Math.max(0, -el.getBoundingClientRect().top)) : 0;
+      return [p, t, s];
+    };
+    const paint = (v: number, t: number, s: number) => {
+      el.style.setProperty("--p", v.toFixed(4));
+      el.style.setProperty("--s", Math.sin(Math.PI * v).toFixed(4));
+      if (v >= 0.999) cover.dataset.done = "";
+      else delete cover.dataset.done;
+      if (mbook) {
+        paintBook(s);
+        return;
+      }
+      let turned = 0;
+      let past = 0;
+      for (let k = 1; k <= TURNS; k++) {
+        const tk = leafT(t, k);
+        el.style.setProperty("--t" + k, tk.toFixed(4));
+        el.style.setProperty("--s" + k, Math.sin(Math.PI * tk).toFixed(4));
+        if (tk >= 0.999) turned = k;
+        if (tk > 0.5) past = k;
+      }
+      // Only the top spread and, while a leaf turns, the spread under it are visible.
+      const turning = turned < TURNS && leafT(t, turned + 1) > 0;
+      const key = turned + (turning ? "+" : "");
+      if (key !== shownKey) {
+        shownKey = key;
+        const on = new Set([turned, turning ? turned + 1 : turned]);
+        [L, Rt].forEach((side) =>
+          side.forEach((f, i) => {
+            if (!f) return;
+            if (on.has(i)) delete f.dataset.off;
+            else f.dataset.off = "";
+          }),
+        );
+      }
+      if (past !== shownSpread) {
+        shownSpread = past;
+        setSpread(past);
+      }
+    };
+    // The pages ease towards the scroll position (≈ lerp 0.11 per frame), so they move with weight
+    // instead of snapping, without lagging far behind.
+    const tick = (now: number) => {
+      const dt = lastT ? Math.min(64, now - lastT) : 16.7;
+      lastT = now;
+      const [gp, gt, gs] = target();
+      const k = 1 - Math.exp(-dt / 140);
+      curP += (gp - curP) * k;
+      curT += (gt - curT) * k;
+      // A page scrolling inside the book follows the finger closely; a turn eases like on desktop.
+      curS += (gs - curS) * (1 - Math.exp(-dt / 70));
+      if (Math.abs(gp - curP) < 0.0008) curP = gp;
+      if (Math.abs(gt - curT) < 0.002) curT = gt;
+      if (Math.abs(gs - curS) < 0.5) curS = gs;
+      paint(curP, curT, curS);
+      if (curP !== gp || curT !== gt || curS !== gs) raf = requestAnimationFrame(tick);
+      else {
+        raf = 0;
+        lastT = 0;
+      }
+    };
+    const update = () => {
+      // Phones/tablets: the book follows the finger exactly (founder, 2026-11-05: the eased catch-up felt like the
+      // page was settling and holding the scroll back). Desktop keeps its weighted easing.
+      if (curP < 0 || mbook) {
+        [curP, curT, curS] = target(); // first paint / refresh: jump straight to the right state
+        paint(curP, curT, curS);
+        return;
+      }
+      if (!raf) raf = requestAnimationFrame(tick);
+    };
+    measure();
+    const ro = new ResizeObserver(() => {
+      measure();
+      update();
+    });
+    ro.observe(stick);
+    pages().forEach((pg) => ro.observe(pg)); // page heights change with fonts/images (phone book segments)
+    const onScroll = update;
+    const onResize = () => {
+      measure();
+      update();
+    };
+    // Only listen while the book is near the viewport.
+    let listening = false;
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting && !listening) {
+          listening = true;
+          window.addEventListener("scroll", onScroll, { passive: true });
+          window.addEventListener("resize", onResize, { passive: true });
+        } else if (!e.isIntersecting && listening) {
+          listening = false;
+          window.removeEventListener("scroll", onScroll);
+          window.removeEventListener("resize", onResize);
+        }
+        onScroll();
+      },
+      { rootMargin: "50% 0px 50% 0px" },
+    );
+    io.observe(el);
+    update();
+    return () => {
+      io.disconnect();
+      ro.disconnect();
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+
+  return (
+    <div ref={ref} className="vb" style={{ "--turns": TURNS } as React.CSSProperties}>
+      <style>{CSS_ALL}</style>
+      {/* Without JS nothing would turn the pages, so stack the spreads instead of pinning an unmoving book. */}
+      <noscript dangerouslySetInnerHTML={{ __html: `<style>@media (min-width:1024px){${STACKED}}</style>` }} />
+      <div
+        ref={stickRef}
+        className="vb-stick rounded-2xl outline-none focus-visible:outline-2 focus-visible:outline-offset-8 focus-visible:outline-accent"
+        role="region"
+        aria-label="Ventures and timeline book. Use the arrow keys to turn the pages."
+        tabIndex={0}
+        onKeyDown={onKey}
+      >
+      <div ref={bookRef} className="vb-book">
+        <div aria-hidden="true" className="vb-shadow" />
+        <div aria-hidden="true" className="vb-shadow-l" />
+        <div aria-hidden="true" className="vb-board" />
+        <div aria-hidden="true" className="vb-board-l" />
+        <div ref={gridRef} className="vb-grid relative grid lg:grid-cols-2">
+          {/* Left page: Spotmies */}
+          <article id={S.id} data-face="L0" className={"vb-left rounded-2xl lg:rounded-r-none " + pageCls}>
+            <span aria-hidden="true" className="vb-head left-6 sm:left-10"><span className="text-accent">01</span> · {S.name}</span>
+            <span aria-hidden="true" className="vb-folio left-6 sm:left-10">1</span>
+            <div className="flex items-start gap-4 sm:gap-6">
+              <div className="flex min-w-0 flex-1 flex-col gap-5">
+                <LogoPlate logo={S.logo} h={28} />
+                <div className="flex flex-col gap-1.5">
+                  <h3 className="font-serif text-[30px] leading-tight sm:text-[34px]">
+                    <NameLink name={S.name} href={S.href} />
+                  </h3>
+                  {S.meta && <p className={label}>{S.meta}</p>}
+                </div>
+              </div>
+              {/* The opening pages are full, so the team photo sits beside the heading as a small print. */}
+              {S.photo && (
+                <div className="w-[40%] max-w-[220px] shrink-0 pt-1">
+                  <PagePhoto image={S.photo} wide={S.photo.wide} tilt={2} small />
+                </div>
+              )}
+            </div>
+            <p className={body}>{S.summary}</p>
+            <Chips title={S.chipsLabel} items={S.chips} />
+            <Graphs m={S.metrics} kind="spotmies" />
+            {S.metrics.growth && <GrowthLine g={S.metrics.growth} />}
+            <p className={label}>
+              {S.metrics.scope}
+              {S.metrics.asOf && <> · as of {S.metrics.asOf}</>}
+            </p>
+            {S.support && <p className={body + " text-muted"}>{S.support}</p>}
+            {/* "Selected work" moved to the Projects section (addendum-02 §2.1) */}
+          </article>
+
+          {/* Right page: Reaidy (also the front of leaf 1 on desktop) */}
+          <article id={R.id} data-face="R0" className={"vb-right rounded-2xl lg:rounded-l-none " + pageCls}>
+            <span aria-hidden="true" className="vb-head right-6 sm:right-10"><span className="text-accent">02</span> · {R.name}</span>
+            <span aria-hidden="true" className="vb-folio right-6 sm:right-10">2</span>
+            <div className="flex items-start gap-4 sm:gap-6">
+              <div className="flex min-w-0 flex-1 flex-col gap-5">
+                <LogoPlate logo={R.logo} h={19} />
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <h3 className="font-serif text-[30px] leading-tight sm:text-[34px]">
+                      <NameLink name={R.name} href={R.href} />
+                    </h3>
+                    <span className={"rounded-full border border-border px-3 py-1 " + label}>{R.status}</span>
+                  </div>
+                  {R.meta && <p className={label}>{R.meta}</p>}
+                </div>
+              </div>
+              {R.photo && (
+                <div className="w-[40%] max-w-[220px] shrink-0 pt-1">
+                  <PagePhoto image={R.photo} wide={R.photo.wide} tilt={-2} small />
+                </div>
+              )}
+            </div>
+            <p className={body}>{R.summary}</p>
+            <Chips title={R.chipsLabel} items={R.chips} />
+            <Graphs m={R.metrics} kind="reaidy" />
+            <p className={label}>
+              {R.metrics.scope}
+              {R.metrics.asOf && <> · as of {R.metrics.asOf}</>}
+            </p>
+            {R.whyStopped && <p className={body}>{R.whyStopped}</p>}
+            {R.support && <p className={body + " text-muted"}>{R.support}</p>}
+            <blockquote className="self-start border-l border-foreground/30 pl-5 lg:mt-auto font-serif text-xl leading-snug sm:text-2xl">
+              &ldquo;{R.lesson}&rdquo;
+            </blockquote>
+          </article>
+
+          {/* Timeline spreads, newest first (addendum-02 §1; phase 2 content 2026-11-05). Both pages carry content:
+              one entry runs over the spread (story left, work right); two entries get a page each. Spread n's left page
+              is the back of leaf n; its right page is the front of leaf n + 1 (the last one doesn't turn). */}
+          {TL.map((sp, i) => {
+            const n = i + 1;
+            const last = n === TURNS;
+            const leftNo = 2 * n + 1;
+            return (
+              <article key={sp.title} className="vb-spread" aria-labelledby={`vb-tl-${n}`}>
+                <div
+                  data-face={"L" + n}
+                  className={"vb-half vb-hl vb-paper vb-pl " + halfCls}
+                  style={{ "--t": `var(--t${n})`, "--sh": last ? "0" : `var(--s${n + 1})`, "--z": `${(1 + 0.15 * n).toFixed(2)}px` } as React.CSSProperties}
+                >
+                  <span aria-hidden="true" className="vb-head left-6 sm:left-10"><span className="text-accent">{pad2(leftNo)}</span></span>
+                  <span aria-hidden="true" className="vb-folio left-6 sm:left-10">{leftNo}</span>
+                  {sp.entries.length === 2 ? (
+                    <EntryPage pg={sp.entries[0]} id={`vb-tl-${n}`} tilt={-1.2} />
+                  ) : (
+                    <SoloLeft pg={sp.entries[0]} id={`vb-tl-${n}`} />
+                  )}
+                </div>
+                <div
+                  data-face={"R" + n}
+                  className={"vb-half vb-hr vb-paper vb-pr " + halfCls}
+                  style={{ "--t": last ? "0" : `var(--t${n + 1})`, "--sh": `var(--s${n})`, "--z": `${(0.8 - 0.15 * n).toFixed(2)}px` } as React.CSSProperties}
+                >
+                  <span aria-hidden="true" className="vb-head right-6 sm:right-10"><span className="text-accent">{pad2(leftNo + 1)}</span></span>
+                  <span aria-hidden="true" className="vb-folio right-6 sm:right-10">{leftNo + 1}</span>
+                  {sp.entries.length === 2 ? <EntryPage pg={sp.entries[1]} tilt={1.2} /> : <SoloRight pg={sp.entries[0]} />}
+                </div>
+              </article>
+            );
+          })}
+
+          {/* Spine shadow down the middle of the open spread */}
+          <div
+            aria-hidden="true"
+            className="vb-spine pointer-events-none absolute inset-y-0 left-1/2 hidden w-16 -translate-x-1/2 bg-linear-to-r from-transparent via-black/15 to-transparent lg:block"
+          />
+          <div aria-hidden="true" className="vb-crease pointer-events-none absolute inset-y-0 left-1/2 hidden w-3 -translate-x-1/2 lg:block" />
+        </div>
+
+        {/* Cover: its angle follows scroll */}
+        <div ref={coverRef} className="vb-cover" aria-hidden="true">
+          <div className="vb-sheen" />
+          {/* Cover in the site's own UI language: mono accent label, serif title, the two logos, hairline footer */}
+          <div className="relative flex h-full flex-col justify-between p-8 pl-12 sm:p-12 sm:pl-16">
+            <span className="font-mono text-xs tracking-[0.2em] text-[#818cf8] uppercase">{coverKicker}</span>
+            <div>
+              <p className="font-serif text-4xl leading-[1.05] sm:text-6xl">{trackRecord.title}</p>
+              <div className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-5">
+                <CoverLogo logo={S.logo} h={34} />
+                <CoverLogo logo={R.logo} h={22} />
+              </div>
+            </div>
+            <div className="flex items-center justify-between border-t border-white/10 pt-4 font-mono text-[11px] tracking-[0.2em] text-stone-400 uppercase">
+              <span>01 · {S.name}</span>
+              <span>02 · {R.name}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* Phones/tablets book: the page you're on, and a way past the book (shown only while it is a book). */}
+      <div className="vb-mrow mt-3 hidden h-12 items-center justify-between gap-3 font-mono text-[11px] tracking-[0.16em] text-muted uppercase">
+        <span aria-hidden="true" className="min-w-0 truncate">
+          <span className="text-accent">{pad2(slide + 1)}</span> · {SLIDES[slide]} <span className="text-accent">· {slide + 1} / {SLIDES.length}</span>
+        </span>
+        <a href="#experience" className="inline-flex min-h-11 shrink-0 items-center underline-offset-4 transition hover:text-foreground hover:underline">
+          {timeline.skipLabel}
+        </a>
+      </div>
+      {/* Desktop: where you are in the book, and a way past it. Under the book, because a book taller than
+          the screen pins by its bottom edge. */}
+      <div className="mt-5 hidden items-center justify-between gap-4 font-mono text-xs tracking-[0.16em] text-muted uppercase lg:flex">
+        <span className="vb-tl-ind" aria-hidden="true">
+          {SPREADS[spread]} <span className="text-accent">· {spread + 1} / {SPREADS.length}</span>
+        </span>
+        <a href="#experience" className="ml-auto inline-flex min-h-11 items-center underline-offset-4 transition hover:text-foreground hover:underline">
+          {timeline.skipLabel}
+        </a>
+      </div>
+      </div>
+      {/* Scroll room for the page turns while the book is pinned (desktop only) */}
+      <div aria-hidden="true" className="vb-pinspace" />
+    </div>
+  );
+}
+
+// Company name as an external link with a visible ↗ (opens in a new tab).
+function NameLink({ name, href }: { name: string; href: string | null }) {
+  if (!href) return <>{name}</>;
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="underline-offset-4 transition hover:underline">
+      {name}
+      <ArrowUpRight size={18} className="ml-1 align-super text-muted" />
+      <span className="sr-only"> (opens in a new tab)</span>
+    </a>
+  );
+}
