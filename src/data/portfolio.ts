@@ -11,7 +11,7 @@ const meta = (...parts: (string | null)[]): string | null => parts.filter(Boolea
 // Founder values still to come (null = hidden on the site).
 const spotmiesCofounders: string | null = null; // e.g. "Satish, Hemanth and Naveen" (needs their OK)
 const spotmiesEndYear: string | null = null; // "present" or the year it ended
-const reaidyTitle: string | null = "Co-Founder"; // LinkedIn (founder OK, 2026-11-05)
+const reaidyTitle: string | null = "Co-Founder & CTO"; // founder, 2026-11-06 (LinkedIn says "Co-Founder"); book only, Experience card unchanged
 const reaidyYears: string | null = "Sep 2023 – Apr 2026"; // LinkedIn (founder OK, 2026-11-05)
 
 /** Every field currently hidden because it's null (for the founder's fill-in list). */
@@ -338,7 +338,8 @@ export const trackRecord = {
     // Logo from spotmies.com (white lettering, so it sits on a dark plate on the paper).
     logo: { src: "/brand/spotmies-logo.webp", width: 518, height: 112, alt: "Spotmies logo" },
     // Founder's photo for Spotmies (2026-11-05; replaced the office group shot, kept at /ventures/spotmies-office-team.webp).
-    photo: { src: "/ventures/spotmies-team-steps.webp", alt: "The Spotmies team" } as { src: string; alt: string; wide?: boolean } | null,
+    // Group photo from IMG_1666 (founder, 2026-11-06; replaced the team-on-steps photo). New file name: browsers cache by name.
+    photo: { src: "/ventures/spotmies-team-2026.webp", alt: "The Spotmies team" } as { src: string; alt: string; wide?: boolean } | null,
     // Wording taken from the Spotmies chapter and summary (no new claims).
     chipsLabel: "What we built",
     chips: ["Web", "Mobile", "AI", "Blockchain", "Smart contracts", "NFTs", "dApps"],
@@ -416,7 +417,7 @@ export const timeline = {
           type: "product",
           // Wording approved by the founder (2026-11-05); every fact from his LinkedIn posts / Reaidy's company page (research file).
           oneLine: "An AI hiring platform that runs every step from resume screening to technical and HR interviews, and gives candidates instant scorecards.",
-          role: "Co-Founder",
+          role: "Co-Founder & CTO", // founder, 2026-11-06
           whatIDid: [
             "Pitched Reaidy.io at the Founder's Battleground event by PW School Of Startups in Bengaluru.",
             "Ran a campus recruitment drive at Vignan Institute of Engineering for Women where every interview was done by Reaidy's AI interviewer.",
@@ -512,7 +513,7 @@ export const timeline = {
           title: "Hexagon",
           type: "hardware / IoT",
           oneLine: "Hexagon: IoT security devices and smart home-appliance controllers, designed from schematic to finished boards.",
-          role: "Project Lead",
+          role: "Co-Founder & Tech Lead", // founder, 2026-11-06 (was "Project Lead")
           whatIDid: [
             "Built IoT security devices and IoT home-appliance controllers.",
             "Designed the PCBs in EasyEDA, from layout to assembled boards.",
@@ -606,7 +607,7 @@ export const experience = {
       href: site.reaidyUrl,
       employment: "Part-time",
       location: "Visakhapatnam",
-      stints: [{ title: "Co-Founder", start: "2023-09", end: "2026-04", workplace: "On-site" }],
+      stints: [{ title: "Co-Founder & CTO", start: "2023-09", end: "2026-04", workplace: "On-site" }], // founder, 2026-11-06: CTO added
       oneLine: trackRecord.reaidy.summary,
       tags: ["Product Development", "Business Strategy"],
       metrics: {
@@ -812,22 +813,25 @@ export const testimonials = {
   title: "In their words.",
   minToShow: 2,
   // Source: ../Sekhar_Javvadi_Portfolio_Testimonials.pdf (founder, 2026-11-05), copied word for word in the PDF's order.
-  // Only one Swaroop (founder, 2026-11-05): the Dwight Labs one stays; Advait Labs & Decentralz (#1 in the PDF) removed.
+  // Only one Swaroop (founder, 2026-11-05): the Dwight Labs quote (#11 in the PDF) stays; #1 removed. Company corrected
+  // to "Advait Labs" by the founder (2026-11-06).
   // photo: from the founder's "client images" folder (2026-11-05), square crops in /public/testimonials. Every entry
   // has its own photo now; null would fall back to a neutral stand-in.
   items: [
+    // Order (founder, 2026-11-06): Marco Turk, Larry Blackburn, Nolan Clark, Ravi Eswarapu, Lakshmipathi Raju,
+    // Vamsi Gummadi, Ravi Unukuru, Pragnatej, Swaroop; the rest in any order.
     { quote: "I was particularly impressed by Sekhar's technical expertise and adaptability while developing our AI solution. He quickly understood our requirements, translated ideas into practical technical solutions, and ensured the development process went smoothly. I highly recommend working with him for innovative technology projects.", name: "Marco Turk", role: "Founder", company: "Zin In Thuiswerken", relationship: null, photo: { src: "/testimonials/marco-turk.webp", alt: "Marco Turk" }, link: null, context: null },
+    { quote: "Sekhar is building something genuinely interesting in the hardware technology space. His vision of creating a lightweight PLM platform for modern hardware teams through OpenPlan AI addresses an interesting and underserved market. I am impressed by his understanding of the industry, his ability to identify market opportunities, and his ambition to build a product for this niche.", name: "Larry Blackburn", role: "Former Director of Marketing", company: "Intel", relationship: null, photo: { src: "/testimonials/larry.webp", alt: "Larry Blackburn" }, link: null, context: null },
+    { quote: "I connected with Sekhar through Reddit, and what immediately stood out was his genuine interest in solving meaningful problems. He has a great ability to understand challenges, work with people, and think strategically about business and marketing. His passion for building and his problem solving mindset make him someone I genuinely admire.", name: "Nolan Clark", role: "Director of Business Operations", company: "Motorola", relationship: null, photo: { src: "/testimonials/nolan.webp", alt: "Nolan Clark" }, link: null, context: null },
+    { quote: "I have known Sekhar for over four years and have witnessed his entrepreneurial journey closely. Watching him grow Spotmies from a small team of around four people to a team of 25 within our incubation ecosystem has been remarkable. His hunger to achieve more, passion for entrepreneurship, and ability to scale a business at such a pace are truly inspiring.", name: "Ravi Eswarapu", role: "Serial Entrepreneur, Investor & CEO", company: "RTH", relationship: null, photo: { src: "/testimonials/ravi-eswarapu.webp", alt: "Ravi Eswarapu" }, link: null, context: null },
+    { quote: "Sekhar started his entrepreneurial journey during his college days, building things from the ground up alongside his friends. His journey and dedication towards entrepreneurship have genuinely inspired me to start my own company. He is one of the most positive and energetic people I have met, and his enthusiasm for building something meaningful is contagious.", name: "Lakshmipathi Raju", role: "Co Founder & CEO", company: "Digi Automation", relationship: null, photo: { src: "/testimonials/lakshmipathi-raju.webp", alt: "Lakshmipathi Raju" }, link: null, context: null },
     { quote: "Sekhar demonstrated excellent ownership and dedication throughout our project. His ability to understand requirements, coordinate technical execution, and deliver quality work within the expected timelines was outstanding. His commitment to customer satisfaction and project delivery really impressed me.", name: "Vamsi Gummadi", role: "Founder & CEO", company: "Sweken", relationship: null, photo: { src: "/testimonials/vamsi-gummadi.webp", alt: "Vamsi Gummadi" }, link: null, context: null },
     { quote: "Sekhar has a remarkable understanding of technology and product development. I was particularly impressed by his ability to connect product ideas with practical business requirements. His suggestions around UI design, frontend development, and blockchain technology helped bring a broader perspective to the project. He is exceptionally knowledgeable in his field.", name: "Ravi Unukuru", role: "Web3 Entrepreneur & YouTuber", company: null, relationship: null, photo: { src: "/testimonials/ravi-unukuru-v2.webp", alt: "Ravi Unukuru" }, link: null, context: null },
-    { quote: "Sekhar is one of the most inspiring people I have met. His passion for building startups and creating something of his own is remarkable. What stands out about him is his entrepreneurial mindset, strategic thinking, and ability to turn ambitious ideas into meaningful initiatives.", name: "Shiva", role: "Co Founder", company: "No Drafts", relationship: null, photo: { src: "/testimonials/shiva.webp", alt: "Shiva" }, link: null, context: null },
     { quote: "Sekhar has an exceptional understanding of technology and knows how to connect it with business and marketing strategies. What impresses me most is his ability to understand users, identify what truly matters to a product, and distinguish essential features from unnecessary complexity. His product thinking and ability to grasp things quickly are remarkable.", name: "Pragnatej", role: "Co Founder & Chief Product Officer", company: "Mutiny", relationship: null, photo: { src: "/testimonials/pragnatej-v2.webp", alt: "Pragnatej" }, link: null, context: null },
+    { quote: "Sekhar demonstrated exceptional ownership while working on our pharmaceutical technology application. He took responsibility for the technical development and played an important role in bringing the application to production. The product was successfully launched in California for clinical trial operations in the United States. His contribution, technical commitment, and ability to handle complex enterprise requirements were invaluable. We have continued working towards the next version of the product.", name: "Swaroop", role: "Founder & CEO", company: "Advait Labs", relationship: null, photo: { src: "/testimonials/swaroop.webp", alt: "Swaroop" }, link: null, context: null },
+    { quote: "Sekhar is one of the most inspiring people I have met. His passion for building startups and creating something of his own is remarkable. What stands out about him is his entrepreneurial mindset, strategic thinking, and ability to turn ambitious ideas into meaningful initiatives.", name: "Shiva Dokula", role: "Co Founder", company: "No Drafts", relationship: null, photo: { src: "/testimonials/shiva.webp", alt: "Shiva Dokula" }, link: null, context: null },
     { quote: "Sekhar has an incredible ability to build products from scratch. He developed our application through Spotmies, and I was particularly impressed by how quickly he understood the complexities of the DNA and healthcare domain. His learning speed, technical grasp, and ability to translate complex requirements into working solutions are outstanding.", name: "Navin Sai", role: "Founder & CEO", company: "MyBodyCode", relationship: null, photo: { src: "/testimonials/navin-sai.webp", alt: "Navin Sai" }, link: null, context: null },
     { quote: "Sekhar has an exceptional level of dedication towards building technology that creates real value for businesses. I was particularly impressed by his work on developing our IoT device. He and his team took the project from development to a production grade implementation. His technical commitment and execution capabilities were truly impressive.", name: "Praveen", role: "Co Founder & CEO", company: "VitalCare Pro and Safeguard Air", relationship: null, photo: { src: "/testimonials/praveen.webp", alt: "Praveen" }, link: null, context: null },
-    { quote: "I connected with Sekhar through Reddit, and what immediately stood out was his genuine interest in solving meaningful problems. He has a great ability to understand challenges, work with people, and think strategically about business and marketing. His passion for building and his problem solving mindset make him someone I genuinely admire.", name: "Nolan", role: "Director of Business Operations", company: "Motorola", relationship: null, photo: { src: "/testimonials/nolan.webp", alt: "Nolan" }, link: null, context: null },
-    { quote: "Sekhar is building something genuinely interesting in the hardware technology space. His vision of creating a lightweight PLM platform for modern hardware teams through OpenPlan AI addresses an interesting and underserved market. I am impressed by his understanding of the industry, his ability to identify market opportunities, and his ambition to build a product for this niche.", name: "Larry", role: "Former Director of Marketing", company: "Intel", relationship: null, photo: { src: "/testimonials/larry.webp", alt: "Larry" }, link: null, context: null },
-    { quote: "Sekhar demonstrated exceptional ownership while working on our pharmaceutical technology application. He took responsibility for the technical development and played an important role in bringing the application to production. The product was successfully launched in California for clinical trial operations in the United States. His contribution, technical commitment, and ability to handle complex enterprise requirements were invaluable. We have continued working towards the next version of the product.", name: "Swaroop", role: "Founder & CEO", company: "Dwight Labs", relationship: null, photo: { src: "/testimonials/swaroop.webp", alt: "Swaroop" }, link: null, context: null },
-    { quote: "Sekhar started his entrepreneurial journey during his college days, building things from the ground up alongside his friends. His journey and dedication towards entrepreneurship have genuinely inspired me to start my own company. He is one of the most positive and energetic people I have met, and his enthusiasm for building something meaningful is contagious.", name: "Lakshmipathi Raju", role: "Co Founder & CEO", company: "Digi Automation", relationship: null, photo: { src: "/testimonials/lakshmipathi-raju.webp", alt: "Lakshmipathi Raju" }, link: null, context: null },
-    { quote: "I have known Sekhar for over four years and have witnessed his entrepreneurial journey closely. Watching him grow Spotmies from a small team of around four people to a team of 25 within our incubation ecosystem has been remarkable. His hunger to achieve more, passion for entrepreneurship, and ability to scale a business at such a pace are truly inspiring.", name: "Ravi Eswarapu", role: "Serial Entrepreneur, Investor & CEO", company: "RTH", relationship: null, photo: { src: "/testimonials/ravi-eswarapu.webp", alt: "Ravi Eswarapu" }, link: null, context: null },
   ] satisfies Testimonial[],
   // Layout-only slots shown while there are fewer than minToShow real entries. Not quotes: every field is [bracketed].
   // The relationship hints follow the source order in addendum-02 §3.3.

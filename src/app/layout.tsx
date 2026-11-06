@@ -70,7 +70,10 @@ const jsonLd = {
 };
 
 // Applies the saved (or system) theme before paint to avoid a flash.
-const themeScript = `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})()`;
+// Also marks the page "motion allowed" (vb-anim) before the first paint, so the Ventures book is a pinned book from
+// the start instead of only once its own script has loaded (2026-11-06; see VenturesBook.tsx). Not set with
+// reduced motion, and never without JS: then the book's pages simply stack.
+const themeScript = `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}try{if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches){document.documentElement.classList.add('vb-anim')}}catch(e){}})()`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

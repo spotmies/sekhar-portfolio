@@ -181,7 +181,24 @@ export default function AssemblySteps({ steps }: { steps: AssemblyStep[] }) {
     measure();
     p = reading;
     draw();
-    window.addEventListener("scroll", kick, { passive: true });
+    // Follow the scroll only while this section is on or near the screen (2026-11-06): it used to measure and
+    // redraw on every scroll anywhere on the page, which cost frames in the Ventures book's page turns on
+    // phones. One last update when it leaves, so it rests fully built (below) or taken apart (above).
+    let following = false;
+    const onScreen = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting && !following) {
+          following = true;
+          window.addEventListener("scroll", kick, { passive: true });
+        } else if (!e.isIntersecting && following) {
+          following = false;
+          window.removeEventListener("scroll", kick);
+        }
+        kick();
+      },
+      { rootMargin: "25% 0px" },
+    );
+    onScreen.observe(el);
     const onResize = () => {
       layout();
       kick();
@@ -191,6 +208,7 @@ export default function AssemblySteps({ steps }: { steps: AssemblyStep[] }) {
     return () => {
       cancelled = true;
       near.disconnect();
+      onScreen.disconnect();
       window.removeEventListener("scroll", kick);
       window.removeEventListener("resize", onResize);
       themeWatch.disconnect();

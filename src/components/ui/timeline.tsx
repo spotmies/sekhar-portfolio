@@ -533,7 +533,9 @@ export default function Timeline({
       {imageUrl && (
         <div
           className={"jm-card mt-8 w-full overflow-hidden rounded-2xl shadow-[0_18px_40px_-24px_rgba(0,0,0,0.45)] " + (imageAspect ? "max-w-[min(300px,72vw)]" : "aspect-[4/3]")}
-          style={imageAspect ? { aspectRatio: imageAspect } : undefined}
+          // Phones: same width, but a 4:5 card instead of the full 9:16 photo (founder, 2026-11-06: the height
+          // was too much); the top of the photo (the face) stays in frame.
+          style={imageAspect ? { aspectRatio: Math.max(imageAspect, 4 / 5) } : undefined}
         >
           {/* eslint-disable-next-line @next/next/no-img-element -- decorative panel image */}
           <img
@@ -541,7 +543,7 @@ export default function Timeline({
             alt={imageAlt}
             draggable={false}
             className="jm-photo h-full w-full object-cover"
-            style={{ objectPosition: imagePosition }}
+            style={{ objectPosition: imageAspect ? "50% 18%" : imagePosition }}
           />
         </div>
       )}

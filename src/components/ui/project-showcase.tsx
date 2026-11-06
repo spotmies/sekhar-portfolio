@@ -162,7 +162,25 @@ export const ProjectShowcase = ({
     // viewport (sideways scroll at ~1024px). At 88% width the tilt (±10°, ~5.6% overhang a side) stays inside.
     // Phones (2026-11-05): a smaller stack so the photo, the quote and the buttons fit on one screen.
     <div className={isMobileView ? "mx-auto w-[62%] max-w-[340px]" : "mx-auto w-full max-w-[460px]"}>
-      <div className="relative" style={{ paddingTop: `${(1 / imageAspectRatio) * 100}%` }}>
+      {/* Founder (2026-11-06): clicking the photos shows the next testimonial (Enter / Space too). */}
+      <div
+        className={"relative " + (count > 1 ? "cursor-pointer" : "")}
+        style={{ paddingTop: `${(1 / imageAspectRatio) * 100}%` }}
+        {...(count > 1
+          ? {
+              role: "button",
+              tabIndex: 0,
+              "aria-label": "Next testimonial",
+              onClick: handleNext,
+              onKeyDown: (e: React.KeyboardEvent) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleNext();
+                }
+              },
+            }
+          : {})}
+      >
         <AnimatePresence>
           {testimonials.map((testimonial, index) => (
             <motion.div
@@ -195,49 +213,42 @@ export const ProjectShowcase = ({
     </div>
   );
 
-  const text = (
-    <div className={"flex w-full flex-col justify-between " + (isMobileView ? "py-0" : "py-4")}>
-      <motion.div
-        key={active}
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: -20, opacity: 0 }}
-        transition={{ duration: 0.2, ease: "easeInOut" }}
-        aria-live="polite"
+  const quoteBlock = (item: ShowcaseItem, animated: boolean) => (
+    <>
+      <h3
+        className={nameClassName}
+        style={{
+          fontSize: currentFontSizes.name,
+          color: colors.name,
+          marginTop: currentSpacing.nameTop,
+          marginBottom: currentSpacing.nameBottom,
+          textAlign: align,
+        }}
       >
-        <h3
-          className={nameClassName}
-          style={{
-            fontSize: currentFontSizes.name,
-            color: colors.name,
-            marginTop: currentSpacing.nameTop,
-            marginBottom: currentSpacing.nameBottom,
-            textAlign: align,
-          }}
-        >
-          {current.name}
-        </h3>
-        <p
-          style={{
-            fontSize: currentFontSizes.position,
-            color: colors.position,
-            marginTop: currentSpacing.positionTop,
-            marginBottom: currentSpacing.positionBottom,
-            textAlign: align,
-          }}
-        >
-          {current.designation}
-        </p>
-        <motion.p
-          style={{
-            fontSize: currentFontSizes.testimony,
-            color: colors.testimony,
-            marginTop: currentSpacing.testimonyTop,
-            marginBottom: currentSpacing.testimonyBottom,
-            textAlign: align,
-          }}
-        >
-          {current.quote.split(" ").map((word, index) => (
+        {item.name}
+      </h3>
+      <p
+        style={{
+          fontSize: currentFontSizes.position,
+          color: colors.position,
+          marginTop: currentSpacing.positionTop,
+          marginBottom: currentSpacing.positionBottom,
+          textAlign: align,
+        }}
+      >
+        {item.designation}
+      </p>
+      <p
+        style={{
+          fontSize: currentFontSizes.testimony,
+          color: colors.testimony,
+          marginTop: currentSpacing.testimonyTop,
+          marginBottom: currentSpacing.testimonyBottom,
+          textAlign: align,
+        }}
+      >
+        {item.quote.split(" ").map((word, index) =>
+          animated ? (
             <motion.span
               key={index}
               initial={{ filter: "blur(10px)", opacity: 0, y: 5 }}
@@ -247,9 +258,40 @@ export const ProjectShowcase = ({
             >
               {word}&nbsp;
             </motion.span>
-          ))}
-        </motion.p>
-      </motion.div>
+          ) : (
+            // same inline-block words as the animated quote, so the lines wrap the same way
+            <span key={index} className="inline-block">
+              {word}&nbsp;
+            </span>
+          ),
+        )}
+      </p>
+    </>
+  );
+
+  const text = (
+    <div className={"flex w-full flex-col justify-between " + (isMobileView ? "py-0" : "py-4")}>
+      {/* Every quote is laid out (invisibly) in the same grid cell, so the text area is always as tall as the
+          longest quote and the buttons below stay put (founder, 2026-11-06: they jumped up and down with the
+          quote's length). Only the active quote is visible and announced. */}
+      <div className="grid">
+        {testimonials.map((t, i) => (
+          <div key={i} aria-hidden="true" className="invisible col-start-1 row-start-1">
+            {quoteBlock(t, false)}
+          </div>
+        ))}
+        <motion.div
+          key={active}
+          className="col-start-1 row-start-1"
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -20, opacity: 0 }}
+          transition={{ duration: 0.2, ease: "easeInOut" }}
+          aria-live="polite"
+        >
+          {quoteBlock(current, true)}
+        </motion.div>
+      </div>
       <div className={`flex w-full flex-wrap gap-4 ${isMobileView ? "pt-1" : "md:pt-0"}`} style={{ justifyContent: "flex-start" }}>
         {count > 1 && (
           <>

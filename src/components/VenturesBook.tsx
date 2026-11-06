@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { timeline, trackRecord, type TimelinePage, type TimelineSpread } from "@/data/portfolio";
 import { ArrowUpRight } from "@/components/HoverIcons";
 
@@ -35,20 +36,22 @@ const ease = (x: number) => x * x * (3 - 2 * x); // ease in/out
 // Leaf k (1-based) turns in the middle 70% of its screen of scrolling, so each spread rests a moment.
 const leafT = (t: number, k: number) => ease(clamp01((t - (k - 1) - 0.15) / 0.7));
 
-// Paper grain: tiny inline SVG noise, no network request.
-const GRAIN =
-  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.11 0 0 0 0 0.1 0 0 0 0 0.09 0 0 0 0.12 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")";
-
-// Paper fibres (long, thin streaks) and a faint mottle, both inline SVG noise, no network request.
-const FIBRES =
-  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='420' height='420'><filter id='f'><feTurbulence type='fractalNoise' baseFrequency='.012 .55' numOctaves='3' seed='7' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.38 0 0 0 0 0.26 0 0 0 0.16 -0.04'/></filter><rect width='100%' height='100%' filter='url(%23f)'/></svg>\")";
-const MOTTLE =
-  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='640' height='640'><filter id='m'><feTurbulence type='fractalNoise' baseFrequency='.006' numOctaves='2' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.55 0 0 0 0 0.46 0 0 0 0 0.3 0 0 0 0.12 -0.02'/></filter><rect width='100%' height='100%' filter='url(%23m)'/></svg>\")";
+// Paper textures: grain, fibres (long, thin streaks) and a faint mottle. They were inline SVG noise, but browsers
+// repaint SVG backgrounds whenever their on-screen scale changes, so a turning page was repainted (texture,
+// photos, text) many times per turn: the lag on normal phones (2026-11-06). Same filters, rendered once to small
+// WebP tiles (scratch script: tiles.js with sharp); a bitmap is drawn once and only moved while a page turns.
+const GRAIN = "url(\"/ventures/paper-grain.webp\")";
+const FIBRES = "url(\"/ventures/paper-fibres.webp\")";
+const MOTTLE = "url(\"/ventures/paper-mottle.webp\")";
+// The page's soft darkening towards its edges: an inset shadow (was a radial-gradient background layer; together
+// with the bitmap tiles that made one page repaint on every frame of its turn).
+const VIG = "inset 0 0 80px rgba(120,98,62,.12)";
 
 const CSS = `
 .vb{--p:1;--s:0;${Array.from({ length: TURNS }, (_, i) => `--t${i + 1}:0;--s${i + 1}:0`).join(";")}}
 .vb-stick{perspective:2000px;perspective-origin:50% 0%}
 .vb-pinspace{display:none}
+.vb-mshade{display:none}
 .vb-book{position:relative;will-change:transform;transform-style:preserve-3d}
 .vb-grid{transform-style:preserve-3d}
 .vb-cover{position:absolute;inset:0;z-index:2;transform-origin:50% 0;backface-visibility:hidden;-webkit-backface-visibility:hidden;will-change:transform;
@@ -66,9 +69,9 @@ const CSS = `
 .dark .vb{--pg-a:#cdc4b1;--pg-b:#ebe4d4}
 .vb-paper{--foreground:#1c1917;--muted:#57534e;--border:rgba(28,25,23,.12);--accent:#4f46e5;color:var(--foreground);
   --paper:#f8f4ea;background-color:var(--paper);
-  background-image:radial-gradient(120% 95% at 50% 45%,transparent 55%,rgba(120,98,62,.10)),${FIBRES},${MOTTLE},${GRAIN};
-  background-size:100% 100%,420px,640px,160px;
-  box-shadow:inset 0 0 0 1px rgba(28,25,23,.08)}
+  background-image:${FIBRES},${MOTTLE},${GRAIN};
+  background-size:420px,640px,160px;
+  box-shadow:${VIG},inset 0 0 0 1px rgba(28,25,23,.08)}
 /* book details: running head at the top, page number at the bottom */
 .vb-head,.vb-folio{position:absolute;font-family:var(--font-geist-mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);opacity:.75;pointer-events:none}
 .vb-head{top:14px}
@@ -89,50 +92,77 @@ const CSS = `
 .vb-shadow-l{display:none}
 
 /* Phones and tablets (< 1024px): a one-page book (founder, 2026-11-05: book animation like desktop, not slides;
-   a two-page spread is too narrow on a phone). Without the data-mbook flag (reduced motion, no JS) the pages
-   simply stack. With it (set from JS): the cover flips open as the book arrives, then the book pins under the
-   nav; a page taller than the screen first scrolls up inside the book, then turns over the left spine onto the
-   next one. A timeline period is one page: its two halves stacked. */
+   a two-page spread is too narrow on a phone). Without the vb-anim class on <html> (reduced motion, no JS) the
+   pages simply stack. With it: the cover flips open as the book arrives, then the book pins under the nav; a
+   page taller than the screen first scrolls up inside the book, then turns over the left spine onto the next.
+   A timeline period is one page: its two halves stacked.
+   vb-anim is set by the early inline script in layout.tsx, before the first paint (2026-11-06, founder: "pages
+   sometimes don't turn, the book scrolls away"). It used to be a flag set by this component's script, so for
+   the 2–3s (production) or ~10s (dev server) before that script ran, the book had no scroll room and scrolled
+   away like normal content. Now the pinned layout and an estimated scroll room are pure CSS from the start;
+   the script refines them (exact --mspace, --fit) and turns the pages once it is ready. */
 @media (max-width:1023px){
   .vb-cover,.vb-board,.vb-board-l,.vb-shadow,.vb-shadow-l{display:none}
   .vb-book{transform:none}
   .vb-grid{display:flex;flex-direction:column;gap:16px}
   .vb-left::after,.vb-right::after{background:linear-gradient(90deg,rgba(28,25,23,.14),transparent 9%,transparent 92%,rgba(255,255,255,.18))}
-  .vb-left,.vb-right,.vb-spread{box-shadow:inset 0 0 0 1px rgba(28,25,23,.08),1px 1px 0 var(--pg-a),2px 2px 0 var(--pg-b),3px 3px 0 var(--pg-a),4px 4px 0 var(--pg-b),0 10px 18px -10px rgba(0,0,0,.35)}
+  .vb-left,.vb-right,.vb-spread{box-shadow:${VIG},inset 0 0 0 1px rgba(28,25,23,.08),1px 1px 0 var(--pg-a),2px 2px 0 var(--pg-b),3px 3px 0 var(--pg-a),4px 4px 0 var(--pg-b),0 10px 18px -10px rgba(0,0,0,.35)}
   .vb-spread{display:flex;flex-direction:column;border-radius:16px;overflow:hidden}
   .vb-half{flex:1}
   .vb-hl{border-bottom:1px solid rgba(28,25,23,.08)}
 
-  .vb[data-mbook] .vb-stick{position:sticky;top:0!important;height:100svh;overflow:hidden;padding-top:76px;perspective:1600px;perspective-origin:50% 40%}
+  .vb-anim .vb .vb-stick{position:sticky;top:0!important;height:100svh;overflow:hidden;padding-top:76px;perspective:1600px;perspective-origin:50% 40%}
   /* the page area; pages are stacked in it, the first on top (z-index from JS); the leaf hinges on its left edge */
-  .vb[data-mbook] .vb-grid{display:block;position:relative;height:calc(100svh - 76px - 60px);transform-style:flat;perspective:1400px;perspective-origin:30% 35%;
-    clip-path:inset(-100vh -100vw 0 -100vw)} /* a long page is cut at the bottom of the page area, like a window */
+  /* A long page is cut at the top and bottom of the page area, like a window (2026-11-06: on small phones a page
+     scrolling up inside the book slid under the nav buttons). 14px above the area stays open for the turning
+     leaf, whose near edge grows a little in perspective. */
+  .vb-anim .vb .vb-grid{display:block;position:relative;height:calc(100svh - 76px - 52px);transform-style:flat;perspective:1400px;perspective-origin:30% 35%;
+    clip-path:inset(-14px -100vw 0 -100vw)}
+  .vb-anim .vb .vb-mrow{height:44px;margin-top:8px}
+  /* Performance (2026-11-06, founder: lag on small phones): each page's transform, visibility and will-change are
+     written straight onto that page from JS, only when they change (no custom properties on the book, which made
+     the browser restyle every page on every scroll). The turning leaf's shadow is one composited layer
+     (opacity only) instead of a pseudo-element that repainted the paper beneath on every frame. */
+
+  .vb-anim .vb .vb-mshade{display:block;position:absolute;inset:0;border-radius:16px;pointer-events:none;opacity:0;will-change:opacity;
+    background:linear-gradient(90deg,rgba(28,25,23,.4),rgba(28,25,23,.14) 45%,transparent 85%)}
   /* every page is one leaf: Spotmies, Reaidy, then each half of a timeline spread on its own (founder, 2026-11-05:
      later pages must turn like the first two, without the next half showing under them) */
-  .vb[data-mbook] .vb-spread{display:contents}
+  .vb-anim .vb .vb-spread{display:contents}
   /* Every page fits the page area, so each one simply turns (founder, 2026-11-05: pages that first scrolled up,
      then turned, felt like a double scroll). Tighter padding on the book's pages; a page still taller than the
      area is laid out a little wider and scaled down to fit (--fit, from JS), so its layout doesn't change. */
-  .vb[data-mbook] .vb-grid>article:not(.vb-spread),.vb[data-mbook] .vb-spread>.vb-half{position:absolute;top:0;left:0;
+  .vb-anim .vb .vb-grid>article:not(.vb-spread),.vb-anim .vb .vb-spread>.vb-half{position:absolute;top:0;left:0;
     width:calc(100% / var(--fit,1));min-height:calc(100% / var(--fit,1));
-    border:0;border-radius:calc(16px / var(--fit,1));transform-origin:0 0;will-change:transform;
-    box-shadow:inset 0 0 0 1px rgba(28,25,23,.08),1px 1px 0 var(--pg-a),2px 2px 0 var(--pg-b),3px 3px 0 var(--pg-a),4px 4px 0 var(--pg-b),0 10px 18px -10px rgba(0,0,0,.35);
-    transform:translate3d(0,calc(var(--y,0) * -1px),0) rotateY(calc(var(--r,0) * -180deg)) scale(var(--fit,1));backface-visibility:hidden;-webkit-backface-visibility:hidden}
-  .vb[data-mbook] .vb-grid>article:not(.vb-spread){gap:14px;padding-top:36px;padding-bottom:36px}
-  .vb[data-mbook] .vb-spread>.vb-half{padding-top:40px;padding-bottom:40px}
-  /* the turning leaf's shadow falls across the page beneath it (opacity only) */
-  .vb[data-mbook] .vb-grid>article:not(.vb-spread)::before,.vb[data-mbook] .vb-spread>.vb-half::before{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;border-radius:inherit;
-    background:linear-gradient(90deg,rgba(28,25,23,.4),rgba(28,25,23,.14) 45%,transparent 85%);opacity:var(--msh,0)}
-  .vb[data-mbook] [data-off]{visibility:hidden}
+    border:0;border-radius:calc(16px / var(--fit,1));transform-origin:0 0;
+    box-shadow:${VIG},inset 0 0 0 1px rgba(28,25,23,.08),1px 1px 0 var(--pg-a),2px 2px 0 var(--pg-b),3px 3px 0 var(--pg-a),4px 4px 0 var(--pg-b),0 10px 18px -10px rgba(0,0,0,.35);
+    transform:rotateY(calc(var(--r,0) * -180deg)) scale(var(--fit,1));backface-visibility:hidden;-webkit-backface-visibility:hidden}
+  .vb-anim .vb .vb-grid>article:not(.vb-spread){gap:14px;padding-top:36px;padding-bottom:36px}
+  .vb-anim .vb .vb-spread>.vb-half{padding-top:40px;padding-bottom:40px}
   /* the cover opens sideways on the spine, like the pages (founder, 2026-11-05: it flipped up before) */
-  .vb[data-mbook] .vb-cover{display:block;transform-origin:0 50%;border-radius:6px 16px 16px 6px;
+  .vb-anim .vb .vb-cover{display:block;transform-origin:0 50%;border-radius:6px 16px 16px 6px;
     transform:rotateY(calc(var(--p) * -180deg)) translateZ(1px)}
-  .vb[data-mbook] .vb-pinspace{display:block;height:var(--mspace,0px)}
-  .vb[data-mbook] .vb-mrow{display:flex}
+  /* scroll room for the turns: measured by the script (--mspace); until then the same formula without the
+     measured extras: one turn (0.42 of the screen) for every page but the last */
+  .vb-anim .vb .vb-pinspace{display:block;height:var(--mspace,calc(${SLIDES.length - 1} * 42svh))}
+  .vb-anim .vb .vb-mrow{display:flex}
+  /* until the script has painted once, only the first page shows (the pages are stacked, and without the
+     script's z-index the last one would be on top) */
+  .vb-anim .vb:not([data-mready]) .vb-grid>article:not(.vb-spread):not(:first-child),
+  .vb-anim .vb:not([data-mready]) .vb-spread>.vb-half{visibility:hidden}
+  /* Older phone browsers without the svh unit (before Chrome 108 / iOS 15.4): the same sizes in vh. Without this,
+     the book's height and scroll room were invalid there (0), so it scrolled away instead of pinning. */
+  @supports not (height:1svh){
+    .vb-anim .vb .vb-stick{height:100vh}
+    .vb-anim .vb .vb-grid{height:calc(100vh - 76px - 52px)}
+    .vb-anim .vb .vb-pinspace{height:var(--mspace,calc(${SLIDES.length - 1} * 42vh))}
+  }
 }
 @media (min-width:1024px){
   /* closed: book centred on the cover; it slides into place as it opens */
-  .vb-book{transform:translateX(calc((1 - var(--p)) * -25%))}
+  /* --bs (from JS): the whole book, pages and all, scaled down evenly when it is taller than the screen
+     (short or zoomed-in windows), so it always fits between the nav and the bottom of the screen */
+  .vb-book{transform-origin:50% 0;transform:scale(var(--bs,1)) translateX(calc((1 - var(--p)) * -25%))}
   /* one rigid leaf hinged on the spine: front = cover, back = the Spotmies page */
   .vb-cover{left:50%;transform-origin:0 50%;border-radius:6px 16px 16px 6px;transform:rotateY(calc(var(--p) * -180deg)) translateZ(1px)}
   .vb-left{transform-origin:100% 50%;transform:rotateY(calc((1 - var(--p)) * 180deg)) translateZ(1px);
@@ -142,8 +172,8 @@ const CSS = `
   .vb-right::before{z-index:1;background:linear-gradient(90deg,rgba(28,25,23,.38),rgba(28,25,23,.12) 45%,transparent 80%);opacity:var(--s)}
   /* page block edges: the book has thickness */
   /* page block: the stack of pages shows along the outer side and the bottom of each half */
-  .vb-right,.vb-pr{box-shadow:inset 0 0 0 1px rgba(28,25,23,.08),1px 1px 0 var(--pg-a),2px 2px 0 var(--pg-b),3px 3px 0 var(--pg-a),4px 4px 0 var(--pg-b),5px 5px 0 var(--pg-a),6px 6px 0 var(--pg-b),7px 7px 3px rgba(0,0,0,.12)}
-  .vb-left,.vb-pl{box-shadow:inset 0 0 0 1px rgba(28,25,23,.08),-1px 1px 0 var(--pg-a),-2px 2px 0 var(--pg-b),-3px 3px 0 var(--pg-a),-4px 4px 0 var(--pg-b),-5px 5px 0 var(--pg-a),-6px 6px 0 var(--pg-b),-7px 7px 3px rgba(0,0,0,.12)}
+  .vb-right,.vb-pr{box-shadow:${VIG},inset 0 0 0 1px rgba(28,25,23,.08),1px 1px 0 var(--pg-a),2px 2px 0 var(--pg-b),3px 3px 0 var(--pg-a),4px 4px 0 var(--pg-b),5px 5px 0 var(--pg-a),6px 6px 0 var(--pg-b),7px 7px 3px rgba(0,0,0,.12)}
+  .vb-left,.vb-pl{box-shadow:${VIG},inset 0 0 0 1px rgba(28,25,23,.08),-1px 1px 0 var(--pg-a),-2px 2px 0 var(--pg-b),-3px 3px 0 var(--pg-a),-4px 4px 0 var(--pg-b),-5px 5px 0 var(--pg-a),-6px 6px 0 var(--pg-b),-7px 7px 3px rgba(0,0,0,.12)}
   /* board in two halves like the shadow: the left half appears once the Spotmies page has landed */
   .vb-board{left:50%;right:-12px;top:-10px;bottom:-14px;border-radius:6px 20px 20px 6px}
   .vb-board-l{display:block;left:-12px;right:50%;top:-10px;bottom:-14px;border-radius:20px 6px 6px 20px;opacity:clamp(0, calc((var(--p) - .92) * 12.5), 1)}
@@ -393,18 +423,96 @@ type TLPage = TimelinePage;
    (picsum stand-ins until the founder's files arrive) say so in the caption. */
 // `wide`: a 2:1 print for group photos that would lose people at the usual 45:32.
 function PagePhoto({ image, small, tilt = -1.2, wide }: { image: NonNullable<TLPage["image"]>; small?: boolean; tilt?: number; wide?: boolean }) {
+  const openPreview = React.useContext(PreviewCtx);
+  const img = (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={image.src} alt={image.placeholder ? "" : image.alt} loading="lazy" width={wide ? 1000 : 900} height={wide ? 500 : 640} className={"block w-full object-cover " + (wide ? "aspect-[2/1]" : "aspect-[45/32]")} />
+  );
   return (
     <figure
       className={"vb-photo relative w-full bg-white p-2 pb-1.5 shadow-[0_8px_18px_-8px_rgba(0,0,0,.35)] " + (small ? "max-w-[300px]" : "max-w-[400px]")}
       style={{ rotate: `${tilt}deg` }}
     >
       <span aria-hidden="true" className="absolute -top-2.5 left-1/2 h-5 w-20 -translate-x-1/2 rotate-[2deg] bg-[rgba(214,206,190,.75)] shadow-sm" />
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={image.src} alt={image.placeholder ? "" : image.alt} loading="lazy" width={wide ? 1000 : 900} height={wide ? 500 : 640} className={"block w-full object-cover " + (wide ? "aspect-[2/1]" : "aspect-[45/32]")} />
+      {/* Click or tap a photo to see it larger (founder, 2026-11-06). Placeholders don't open. */}
+      {image.placeholder ? (
+        img
+      ) : (
+        <button
+          type="button"
+          onClick={(e) => openPreview({ src: image.src, alt: image.alt }, e.currentTarget)}
+          aria-label={`View photo larger: ${image.alt}`}
+          className="block w-full cursor-zoom-in outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          {img}
+        </button>
+      )}
       <figcaption className="px-1 pt-1.5 font-mono text-[10px] leading-snug tracking-[0.08em] text-[#57534e] uppercase">
         {image.placeholder ? "[placeholder image]" : image.alt}
       </figcaption>
     </figure>
+  );
+}
+
+/* ---------- Photo preview ---------- */
+type Preview = { src: string; alt: string };
+const PreviewCtx = React.createContext<(p: Preview, from: HTMLElement) => void>(() => {});
+
+/** Full-screen view of one page photo: whole photo (never cropped), caption, close with ×, Esc or a click
+    outside it. Rendered into <body>, because the book's 3D transforms would trap a fixed overlay. */
+function PhotoPreview({ preview, onClose }: { preview: Preview | null; onClose: () => void }) {
+  const closeRef = React.useRef<HTMLButtonElement>(null);
+  const [shown, setShown] = React.useState(false); // drives the fade/zoom in
+  React.useEffect(() => {
+    if (!preview) return;
+    const root = document.documentElement;
+    const prevOverflow = root.style.overflow;
+    root.style.overflow = "hidden"; // no page scrolling (or page turning) behind the preview
+    closeRef.current?.focus();
+    const raf = requestAnimationFrame(() => setShown(true));
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "Tab") {
+        e.preventDefault(); // the close button is the only control: keep focus on it
+        closeRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      cancelAnimationFrame(raf);
+      setShown(false); // ready to fade in again next time
+      root.style.overflow = prevOverflow;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [preview, onClose]);
+  if (!preview) return null;
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={preview.alt}
+      onClick={onClose}
+      className={"fixed inset-0 z-[1000] flex flex-col items-center justify-center gap-4 bg-black/85 p-4 backdrop-blur-sm transition-opacity duration-200 sm:p-10 " + (shown ? "opacity-100" : "opacity-0")}
+    >
+      <button
+        ref={closeRef}
+        type="button"
+        onClick={onClose}
+        aria-label="Close photo"
+        className="absolute top-4 right-4 inline-flex size-11 items-center justify-center rounded-full border border-white/20 bg-black/50 text-2xl leading-none text-white outline-none hover:bg-black/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+      >
+        <span aria-hidden="true">×</span>
+      </button>
+      {/* eslint-disable-next-line @next/next/no-img-element -- same pre-optimised WebP the page already loaded */}
+      <img
+        src={preview.src}
+        alt={preview.alt}
+        onClick={(e) => e.stopPropagation()}
+        className={"max-h-[80svh] max-w-full rounded-md object-contain shadow-2xl transition-transform duration-200 " + (shown ? "scale-100" : "scale-95")}
+      />
+      <p className="max-w-[60ch] text-center font-mono text-[11px] tracking-[0.14em] text-white/75 uppercase">{preview.alt}</p>
+    </div>,
+    document.body,
   );
 }
 
@@ -537,8 +645,24 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
   const coverRef = React.useRef<HTMLDivElement>(null);
   const gridRef = React.useRef<HTMLDivElement>(null);
   const pinTop = React.useRef(72); // the sticky top in px, measured
-  const [slide, setSlide] = React.useState(0);
   const [spread, setSpread] = React.useState(0);
+  // Photo preview: which photo is open, and the photo button to give focus back to when it closes.
+  const [preview, setPreview] = React.useState<Preview | null>(null);
+  const opener = React.useRef<HTMLElement | null>(null);
+  const openPreview = React.useCallback((p: Preview, from: HTMLElement) => {
+    opener.current = from;
+    setPreview(p);
+  }, []);
+  const closePreview = React.useCallback(() => {
+    setPreview(null);
+    opener.current?.focus({ preventScroll: true });
+  }, []);
+  // Phones/tablets: the page readout is written straight into the DOM while scrolling (a React re-render of the
+  // whole book at every page change caused a stutter on small phones).
+  const slideRef = React.useRef(0);
+  const shadeRef = React.useRef<HTMLDivElement>(null);
+  const rdName = React.useRef<HTMLSpanElement>(null);
+  const rdCount = React.useRef<HTMLSpanElement>(null);
 
   // The phone/tablet book's leaves, in reading order: Spotmies, Reaidy, then each half of every timeline spread.
   const pages = () =>
@@ -548,9 +672,8 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
   const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // Phones/tablets book: where each page's stretch of scrolling starts (px from the book's pin point), how far
-  // that page scrolls inside the book before it turns, and the scroll length of one turn. Measured in the effect.
+  // that page scrolls inside the book before it turns. Measured in the effect.
   const mSegs = React.useRef<{ start: number; read: number }[]>([]);
-  const mTurn = React.useRef(600);
   const goTo = (i: number) => {
     const el = ref.current;
     const seg = mSegs.current[i];
@@ -574,7 +697,7 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
     if (!dir || e.altKey || e.ctrlKey || e.metaKey) return;
     if (!window.matchMedia("(min-width: 1024px)").matches) {
       if (reduceMotion()) return; // pages are stacked: normal scrolling
-      const n = slide + dir;
+      const n = slideRef.current + dir;
       if (n < 0 || n >= SLIDES.length) return;
       e.preventDefault();
       goTo(n);
@@ -603,16 +726,51 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
     const L = Array.from({ length: TURNS + 1 }, (_, i) => face("L" + i));
     const Rt = Array.from({ length: TURNS + 1 }, (_, i) => face("R" + i));
     let raf = 0;
-    let curP = -1; // shown values: opening (0..1) and timeline position (0..TURNS)
+    let curP = -1; // shown values (desktop): opening (0..1) and timeline position (0..TURNS)
     let curT = 0;
     let lastT = 0;
     let shownKey = "";
     let shownSpread = 0;
-    let curS = 0; // phones/tablets: scroll into the pinned book, px
     let mbook = false;
-    let mTotal = 0;
-    let shownSlide = -1;
     const grid = gridRef.current;
+    const shade = shadeRef.current;
+
+    // ---- Phones/tablets (< 1024px) ----
+    // The pages are found once. Everything the scroll changes is written straight onto the element that uses it,
+    // and only when it changed, at most once per frame.
+    const P = pages();
+    const N = P.length;
+    let segs: { start: number; read: number }[] = [];
+    let turn = 400;
+    let mTotal = 0;
+    let fit = P.map(() => 1);
+    let shownTf = P.map(() => "");
+    let shownOn = P.map((): boolean | null => null);
+    let shownShade = "";
+    let shownShadeZ = "";
+    let shownCoverP = "";
+    let shownSlide = -1;
+    let mframe = 0;
+    let lastW = -1;
+    let ready = false; // phones: painted once (data-mready)
+    // Desktop: how many px the scaled-down book gives back (see measure), and the nav's bottom edge plus a gap.
+    let bookShrink = 0;
+    const NAV_CLEAR = 88;
+
+    const clearMobile = () => {
+      el.style.removeProperty("--mspace");
+      cover.style.removeProperty("--p");
+      P.forEach((pg) => {
+        pg.style.removeProperty("--fit");
+        pg.style.transform = "";
+        pg.style.visibility = "";
+        pg.style.willChange = "";
+        pg.style.zIndex = "";
+      });
+      shownTf = P.map(() => "");
+      shownOn = P.map(() => null);
+      shownShade = shownShadeZ = shownCoverP = "";
+    };
 
     // Switch the phone/tablet book on or off (below 1024px; reduced motion was handled above).
     const setMode = () => {
@@ -621,16 +779,17 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
       mbook = on;
       shownKey = "";
       el.querySelectorAll<HTMLElement>("[data-off]").forEach((f) => delete f.dataset.off);
-      if (on) el.dataset.mbook = "";
-      else {
+      if (on) {
+        el.dataset.mbook = "";
+        book.style.removeProperty("--bs"); // the desktop fit-to-screen scale
+        book.style.marginBottom = "";
+        bookShrink = 0;
+      } else {
         delete el.dataset.mbook;
-        pages().forEach((pg) => {
-          pg.style.removeProperty("--y");
-          pg.style.removeProperty("--r");
-          pg.style.removeProperty("--msh");
-          pg.style.removeProperty("--fit");
-          pg.style.zIndex = "";
-        });
+        cancelAnimationFrame(mframe);
+        mframe = 0;
+        clearMobile();
+        curP = -1;
       }
     };
 
@@ -638,25 +797,22 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
     // 16px above the bottom of the screen instead (the turning pages' text is centred, so it stays visible).
     // Phones/tablets: the book fills the screen under the nav; each page is scaled to fit the page area (--fit:
     // measured at full width, then laid out 1/fit wider, which can only make it shorter, so it always fits) and
-    // gets one turn's stretch of scrolling (half a screen; the last page doesn't turn). `read` (a page scrolling
-    // up inside the book) stays as a fallback and is 0 when everything fits.
+    // gets one turn's stretch of scrolling (~0.42 of a screen; the last page doesn't turn). `read` (a page
+    // scrolling up inside the book before it turns) is only used where a page still doesn't fit at 0.8.
     const measure = () => {
       setMode();
       if (mbook && grid) {
         pinTop.current = 0;
         stick.style.top = "";
         const area = grid.clientHeight;
-        const turn = Math.round(stick.clientHeight * 0.5);
-        mTurn.current = turn;
-        let acc = 0;
-        const P = pages();
+        turn = Math.round(stick.clientHeight * 0.42);
         P.forEach((pg) => {
           pg.style.setProperty("--fit", "1");
           pg.style.minHeight = "0";
         });
         // Photos and graphs grow with the width, so a wider layout can be taller: re-measure until it fits.
-        // Never below 0.8 (smaller text gets hard to read); on very short screens the rest scrolls (`read`).
-        const fit = P.map(() => 1);
+        // Never below 0.8 (smaller text gets hard to read).
+        fit = P.map(() => 1);
         for (let pass = 0; pass < 4; pass++) {
           let changed = false;
           P.forEach((pg, i) => {
@@ -669,65 +825,114 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
           if (!changed) break;
           P.forEach((pg, i) => pg.style.setProperty("--fit", fit[i].toFixed(4)));
         }
-        P.forEach((pg) => (pg.style.minHeight = ""));
-        mSegs.current = P.map((pg, i) => {
+        let acc = 0;
+        segs = P.map((pg, i) => {
           const seg = { start: acc, read: Math.max(0, Math.round(pg.offsetHeight * fit[i] - area)) };
-          acc += seg.read + (i < P.length - 1 ? turn : 0);
+          acc += seg.read + (i < N - 1 ? turn : 0);
           return seg;
         });
+        P.forEach((pg, i) => {
+          pg.style.minHeight = "";
+          pg.style.zIndex = String(2 * (N - i));
+        });
+        mSegs.current = segs;
         mTotal = acc;
         el.style.setProperty("--mspace", mTotal + "px");
+        shownTf = P.map(() => ""); // repaint every visible page with the new fit
         return;
       }
-      pinTop.current = Math.round(Math.min(72, window.innerHeight - stick.offsetHeight - 16));
+      // Desktop: a book taller than the space under the nav (short screens, or the browser zoomed in) is scaled
+      // down evenly to fit, instead of pinning by its bottom edge with its top under the nav (founder,
+      // 2026-11-06). A transform doesn't change the layout box, so a negative bottom margin takes back the
+      // space it frees and the readout row stays right under the book. Never below 0.5.
+      const nat = book.offsetHeight; // unscaled (transforms don't change offsetHeight)
+      const rest = stick.offsetHeight - nat + bookShrink; // the readout row and gaps under the book
+      const f = Math.max(0.5, Math.min(1, (window.innerHeight - NAV_CLEAR - 16 - rest) / nat));
+      bookShrink = Math.round(nat * (1 - f));
+      book.style.setProperty("--bs", f.toFixed(4));
+      book.style.marginBottom = bookShrink ? -bookShrink + "px" : "";
+      const shown = nat - bookShrink + rest;
+      pinTop.current = Math.round(Math.min(f < 1 ? NAV_CLEAR : 72, window.innerHeight - shown - 16));
       stick.style.top = pinTop.current + "px";
     };
-    // Phones/tablets: the visible page scrolls up by --y, the leaf turns with --r (0 → 1), the page beneath
-    // gets the leaf's shadow (--sh). Only the current page and, while it turns, the next one are visible.
-    const paintBook = (s: number) => {
-      const P = pages();
-      const segs = mSegs.current;
-      const n = P.length;
-      const turn = mTurn.current;
+
+    // Phones/tablets, one frame: the cover opens as the book arrives (quicker than on desktop, so it is fully
+    // open before the book pins), then the visible page scrolls up by y and the leaf turns with r (0 → 1); the
+    // page beneath gets the leaf's shadow. Only the current page and, while it turns, the next one are visible.
+    const paintMobile = () => {
+      mframe = 0;
+      const vh = window.innerHeight;
+      const bookTop = book.getBoundingClientRect().top;
+      const p = ease(clamp01((vh * 0.95 - bookTop) / (vh * 0.55)));
+      const ps = p.toFixed(3);
+      if (ps !== shownCoverP) {
+        shownCoverP = ps;
+        cover.style.setProperty("--p", ps);
+        if (p >= 0.999) cover.dataset.done = "";
+        else delete cover.dataset.done;
+      }
+      const s = Math.min(mTotal, Math.max(0, -el.getBoundingClientRect().top));
       const y = segs.map((g) => Math.min(g.read, Math.max(0, s - g.start)));
       // The turn uses almost its whole stretch (a short rest at each end), so there's no dead scroll between pages.
-      const r = segs.map((g, i) => (i < n - 1 ? ease(clamp01(((s - g.start - g.read) / turn - 0.06) / 0.88)) : 0));
+      const r = segs.map((g, i) => (i < N - 1 ? ease(clamp01(((s - g.start - g.read) / turn - 0.06) / 0.88)) : 0));
       let cur = r.findIndex((v) => v < 1);
-      if (cur < 0) cur = n - 1;
-      P.forEach((pg, i) => {
+      if (cur < 0) cur = N - 1;
+      for (let i = 0; i < N; i++) {
+        const pg = P[i];
         const on = i === cur || (i === cur + 1 && r[cur] > 0);
-        if (on) delete pg.dataset.off;
-        else pg.dataset.off = "";
-        pg.style.zIndex = String(n - i);
-        pg.style.setProperty("--y", y[i].toFixed(1));
-        pg.style.setProperty("--r", r[i].toFixed(4));
-        pg.style.setProperty("--msh", i === cur + 1 ? Math.sin(Math.PI * r[cur]).toFixed(3) : "0");
-      });
+        if (on !== shownOn[i]) {
+          shownOn[i] = on;
+          pg.style.visibility = on ? "" : "hidden";
+          pg.style.willChange = on ? "transform" : "auto"; // only the two visible pages get their own layer
+        }
+        if (!on) continue;
+        const tf = `translate3d(0,${(-y[i]).toFixed(1)}px,0) rotateY(${(-r[i] * 180).toFixed(2)}deg) scale(${fit[i].toFixed(4)})`;
+        if (tf !== shownTf[i]) {
+          shownTf[i] = tf;
+          pg.style.transform = tf;
+        }
+      }
+      if (shade) {
+        const o = cur + 1 < N ? Math.sin(Math.PI * r[cur]).toFixed(3) : "0";
+        if (o !== shownShade) {
+          shownShade = o;
+          shade.style.opacity = o;
+        }
+        const z = String(2 * (N - cur - 1) + 1); // just above the page beneath, under the turning leaf
+        if (z !== shownShadeZ) {
+          shownShadeZ = z;
+          shade.style.zIndex = z;
+        }
+      }
       const shown = Math.max(0, r.findIndex((v) => v < 0.5));
       if (shown !== shownSlide) {
         shownSlide = shown;
-        setSlide(shown);
+        slideRef.current = shown;
+        if (rdName.current) rdName.current.textContent = SLIDES[shown];
+        if (rdCount.current) rdCount.current.textContent = String(shown + 1);
+      }
+      // First paint done: each page's visibility is now set here, so the CSS "page 1 only" stand-in can go.
+      if (!ready) {
+        ready = true;
+        el.dataset.mready = "";
       }
     };
+
+    // ---- Desktop (>= 1024px), unchanged ----
     // Opening is spread over ~80% of a screen of scrolling:
     // closed while the book's top is below 95% of the viewport, fully open at 15%.
     // Then, while pinned, each screen of scrolling turns one leaf.
-    const target = (): [number, number, number] => {
+    const target = (): [number, number] => {
       const vh = window.innerHeight;
       const p = ease(clamp01((vh * 0.95 - book.getBoundingClientRect().top) / (vh * 0.8)));
-      const t = lg.matches ? Math.min(TURNS, Math.max(0, (pinTop.current - el.getBoundingClientRect().top) / vh)) : 0;
-      const s = mbook ? Math.min(mTotal, Math.max(0, -el.getBoundingClientRect().top)) : 0;
-      return [p, t, s];
+      const t = Math.min(TURNS, Math.max(0, (pinTop.current - el.getBoundingClientRect().top) / vh));
+      return [p, t];
     };
-    const paint = (v: number, t: number, s: number) => {
+    const paint = (v: number, t: number) => {
       el.style.setProperty("--p", v.toFixed(4));
       el.style.setProperty("--s", Math.sin(Math.PI * v).toFixed(4));
       if (v >= 0.999) cover.dataset.done = "";
       else delete cover.dataset.done;
-      if (mbook) {
-        paintBook(s);
-        return;
-      }
       let turned = 0;
       let past = 0;
       for (let k = 1; k <= TURNS; k++) {
@@ -761,41 +966,47 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
     const tick = (now: number) => {
       const dt = lastT ? Math.min(64, now - lastT) : 16.7;
       lastT = now;
-      const [gp, gt, gs] = target();
+      const [gp, gt] = target();
       const k = 1 - Math.exp(-dt / 140);
       curP += (gp - curP) * k;
       curT += (gt - curT) * k;
-      // A page scrolling inside the book follows the finger closely; a turn eases like on desktop.
-      curS += (gs - curS) * (1 - Math.exp(-dt / 70));
       if (Math.abs(gp - curP) < 0.0008) curP = gp;
       if (Math.abs(gt - curT) < 0.002) curT = gt;
-      if (Math.abs(gs - curS) < 0.5) curS = gs;
-      paint(curP, curT, curS);
-      if (curP !== gp || curT !== gt || curS !== gs) raf = requestAnimationFrame(tick);
+      paint(curP, curT);
+      if (curP !== gp || curT !== gt) raf = requestAnimationFrame(tick);
       else {
         raf = 0;
         lastT = 0;
       }
     };
     const update = () => {
-      // Phones/tablets: the book follows the finger exactly (founder, 2026-11-05: the eased catch-up felt like the
-      // page was settling and holding the scroll back). Desktop keeps its weighted easing.
-      if (curP < 0 || mbook) {
-        [curP, curT, curS] = target(); // first paint / refresh: jump straight to the right state
-        paint(curP, curT, curS);
+      if (mbook) {
+        // Phones/tablets: the book follows the finger exactly (no easing), painted once per frame.
+        if (!mframe) mframe = requestAnimationFrame(paintMobile);
+        return;
+      }
+      if (curP < 0) {
+        [curP, curT] = target(); // first paint / refresh: jump straight to the right state
+        paint(curP, curT);
         return;
       }
       if (!raf) raf = requestAnimationFrame(tick);
     };
     measure();
+    if (mbook) paintMobile(); // before the first paint (also right after a refresh)
+    lastW = window.innerWidth;
     const ro = new ResizeObserver(() => {
       measure();
       update();
     });
     ro.observe(stick);
-    pages().forEach((pg) => ro.observe(pg)); // page heights change with fonts/images (phone book segments)
+    P.forEach((pg) => ro.observe(pg)); // page heights change with fonts/images (phone book segments)
     const onScroll = update;
     const onResize = () => {
+      // Phones: the address bar showing/hiding while scrolling fires resize with only the height changed.
+      // The book is sized in svh, so there is nothing to re-measure (re-measuring here made the pages jump).
+      if (mbook && !lg.matches && window.innerWidth === lastW) return;
+      lastW = window.innerWidth;
       measure();
       update();
     };
@@ -822,12 +1033,14 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
       io.disconnect();
       ro.disconnect();
       cancelAnimationFrame(raf);
+      cancelAnimationFrame(mframe);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onResize);
     };
   }, []);
 
   return (
+    <PreviewCtx.Provider value={openPreview}>
     <div ref={ref} className="vb" style={{ "--turns": TURNS } as React.CSSProperties}>
       <style>{CSS_ALL}</style>
       {/* Without JS nothing would turn the pages, so stack the spreads instead of pinning an unmoving book. */}
@@ -951,6 +1164,9 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
             );
           })}
 
+          {/* Phones/tablets: the turning leaf's shadow on the page beneath (opacity and z-index from JS) */}
+          <div ref={shadeRef} aria-hidden="true" className="vb-mshade" />
+
           {/* Spine shadow down the middle of the open spread */}
           <div
             aria-hidden="true"
@@ -982,7 +1198,8 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
       {/* Phones/tablets book: the page you're on, and a way past the book (shown only while it is a book). */}
       <div className="vb-mrow mt-3 hidden h-12 items-center justify-between gap-3 font-mono text-[11px] tracking-[0.16em] text-muted uppercase">
         <span aria-hidden="true" className="min-w-0 truncate">
-          <span className="text-accent">{pad2(slide + 1)}</span> · {SLIDES[slide]} <span className="text-accent">· {slide + 1} / {SLIDES.length}</span>
+          {/* count first, so a long name is what gets cut on a narrow phone */}
+          <span className="text-accent"><span ref={rdCount}>1</span> / {SLIDES.length}</span> · <span ref={rdName}>{SLIDES[0]}</span>
         </span>
         <a href="#experience" className="inline-flex min-h-11 shrink-0 items-center underline-offset-4 transition hover:text-foreground hover:underline">
           {timeline.skipLabel}
@@ -1002,6 +1219,8 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
       {/* Scroll room for the page turns while the book is pinned (desktop only) */}
       <div aria-hidden="true" className="vb-pinspace" />
     </div>
+    <PhotoPreview preview={preview} onClose={closePreview} />
+    </PreviewCtx.Provider>
   );
 }
 
