@@ -142,6 +142,11 @@ function useIsPhone() {
   );
 }
 
+/* Desktop/tablet size unit (2026-11-07). Everything in the slide was sized in vw, so it ignored the screen's height:
+   on a 1920×1108 or 1440×900 screen the 30-unit track filled only half the height and the text was small on tablets.
+   One unit = 1vw, grown so the track fills ~70% of the height below the nav, capped at 1.45vw. */
+const DESK_UNIT = "max(1vw, min(1.45vw, calc((100svh - 96px) / 43)))";
+
 // Left edge of the site's max-w-6xl column (72rem, with its 1.5rem padding), never less than the original 5vw.
 const COLUMN_LEFT = "max(5vw, calc((100vw - 72rem) / 2 + 1.5rem))";
 
@@ -520,7 +525,7 @@ export default function Timeline({
   }
 
   const trackStyle = {
-    "--tw-desk": `${geo.deskW}vw`,
+    "--tw-desk": `calc(var(--u) * ${geo.deskW})`,
     "--tw-mob": `${geo.mobW}vw`,
   } as CSSProperties;
 
@@ -580,23 +585,25 @@ export default function Timeline({
     <div
       ref={sectionRef}
       className="relative hidden h-[200vw] w-full md:block"
+      style={{ "--u": DESK_UNIT } as CSSProperties}
     >
-      <div className="h-screen w-full sticky top-[0%] pt-[10%] overflow-hidden max-[600px]:top-[5%]">
+      {/* Centred below the nav (was pt-[10%], which left ~1/3 of the screen empty under the track). */}
+      <div className="sticky top-0 flex h-screen w-full flex-col justify-center overflow-hidden pt-[72px]">
         <div
           ref={wholeSliderRef}
-          className="mr-[2vw] flex h-[30vw] w-(--tw-desk) items-center gap-[5vw] px-[5vw] max-[600px]:h-[80vh] max-[600px]:w-(--tw-mob) max-[600px]:px-[7vw]"
+          className="mr-[calc(var(--u)*2)] flex h-[calc(var(--u)*30)] w-(--tw-desk) items-center gap-[calc(var(--u)*5)] px-[calc(var(--u)*5)] max-[600px]:h-[80vh] max-[600px]:w-(--tw-mob) max-[600px]:px-[7vw]"
           style={{
             ...trackStyle,
             // Founder (2026-11-05): start at the page's content column (where the "02 — Education" label sits), not the
             // screen edge; the slide then carries it left. The track grows by the same amount so nothing is squeezed.
             paddingLeft: COLUMN_LEFT,
-            width: `calc(var(--tw-desk) + ${COLUMN_LEFT} - 5vw)`,
+            width: `calc(var(--tw-desk) + ${COLUMN_LEFT} - var(--u) * 5)`,
           }}
         >
           {imageUrl && (
             <div
-              style={imageAspect ? { width: `${deskImgW}vw` } : undefined}
-              className="journey-card h-[26vw] w-[26vw] shrink-0 overflow-hidden rounded-[1vw] shadow-[0_18px_40px_-24px_rgba(0,0,0,0.45)] transition-shadow duration-500 hover:shadow-[0_26px_60px_-18px_color-mix(in_oklab,var(--color-accent)_55%,transparent)] max-[600px]:h-[58vw] max-[600px]:w-[76vw] max-[600px]:rounded-[5vw]">
+              style={imageAspect ? { width: `calc(var(--u) * ${deskImgW})` } : undefined}
+              className="journey-card h-[calc(var(--u)*26)] w-[calc(var(--u)*26)] shrink-0 overflow-hidden rounded-[calc(var(--u)*1)] shadow-[0_18px_40px_-24px_rgba(0,0,0,0.45)] transition-shadow duration-500 hover:shadow-[0_26px_60px_-18px_color-mix(in_oklab,var(--color-accent)_55%,transparent)] max-[600px]:h-[58vw] max-[600px]:w-[76vw] max-[600px]:rounded-[5vw]">
               {/* eslint-disable-next-line @next/next/no-img-element -- decorative panel image */}
               <img
                 src={imageUrl}
@@ -611,7 +618,7 @@ export default function Timeline({
           <div className="relative h-full w-full">
             <div className="w-full absolute left-0 top-[49%] flex items-center h-fit">
               <div
-                className="h-[.8vw] max-[600px]:h-[2vw] max-[600px]:w-[2vw] w-[.8vw] shrink-0 rounded-full"
+                className="h-[calc(var(--u)*.8)] max-[600px]:h-[2vw] max-[600px]:w-[2vw] w-[calc(var(--u)*.8)] shrink-0 rounded-full"
                 style={activeStyle}
               ></div>
               <div
@@ -619,29 +626,29 @@ export default function Timeline({
                 style={activeStyle}
               ></div>
               <div
-                className="h-[.8vw] max-[600px]:h-[2vw] max-[600px]:w-[2vw] w-[.8vw] shrink-0 rounded-full"
+                className="h-[calc(var(--u)*.8)] max-[600px]:h-[2vw] max-[600px]:w-[2vw] w-[calc(var(--u)*.8)] shrink-0 rounded-full"
                 style={activeStyle}
               ></div>
             </div>
 
-            <div className="flex h-1/2 w-full items-center justify-start gap-[.5vw]">
-              <div className="h-full w-[20%] shrink-0 pt-[2vw] max-[600px]:h-fit max-[600px]:pt-[5vw]">
-                <h2 className="w-[65%] font-serif text-[3vw] leading-[0.95] max-[600px]:text-[8.5vw]">
+            <div className="flex h-1/2 w-full items-center justify-start gap-[calc(var(--u)*.5)]">
+              <div className="h-full w-[20%] shrink-0 pt-[calc(var(--u)*2)] max-[600px]:h-fit max-[600px]:pt-[5vw]">
+                <h2 className="w-[65%] font-serif text-[calc(var(--u)*3)] leading-[0.95] max-[600px]:text-[8.5vw]">
                   {title}
                 </h2>
               </div>
 
-              <div className="w-full flex h-full gap-x-[15vw] max-[600px]:gap-x-[40vw]">
+              <div className="w-full flex h-full gap-x-[calc(var(--u)*15)] max-[600px]:gap-x-[40vw]">
                 {topItems.map((item) => {
                   const k = key(item.id);
                   return (
                     <div
                       key={`top-${item.id}`}
-                      className="relative h-full w-[30vw] shrink-0 px-[3vw] max-[600px]:flex max-[600px]:w-[70vw] max-[600px]:flex-col max-[600px]:px-[7vw]"
+                      className="relative h-full w-[calc(var(--u)*30)] shrink-0 px-[calc(var(--u)*3)] max-[600px]:flex max-[600px]:w-[70vw] max-[600px]:flex-col max-[600px]:px-[7vw]"
                     >
                       <div className="w-full absolute left-0 bottom-0 top-0 h-full">
                         <div
-                          className={`size-[1vw] max-[600px]:size-[2.5vw] translate-x-[-50%] relative aspect-square rounded-full jd-${k}`}
+                          className={`size-[calc(var(--u)*1)] max-[600px]:size-[2.5vw] translate-x-[-50%] relative aspect-square rounded-full jd-${k}`}
                           style={activeStyle}
                         ></div>
                         <div
@@ -650,14 +657,14 @@ export default function Timeline({
                         ></div>
                       </div>
 
-                      <div className="mt-[-1vw] space-y-[1vw] max-[600px]:mt-[-2vw]">
+                      <div className="mt-[calc(var(--u)*-1)] space-y-[calc(var(--u)*1)] max-[600px]:mt-[-2vw]">
                         <h3
-                          className={`title-${k} font-serif text-[2.5vw] leading-none max-[600px]:text-[6.4vw]`}
+                          className={`title-${k} font-serif text-[calc(var(--u)*2.5)] leading-none max-[600px]:text-[6.4vw]`}
                         >
                           {item.year} {item.month}
                         </h3>
                         <p
-                          className={`description-${k} w-[90%] max-w-[30ch] text-[1.1vw] font-medium leading-[1.4] max-[600px]:w-[90%] max-[600px]:text-[4.8vw]`}
+                          className={`description-${k} w-[90%] max-w-[30ch] text-[calc(var(--u)*1.1)] font-medium leading-[1.4] max-[600px]:w-[90%] max-[600px]:text-[4.8vw]`}
                           style={mutedTextStyle}
                         >
                           <EntryText text={item.content} />
@@ -671,22 +678,22 @@ export default function Timeline({
             </div>
 
             <div className="h-1/2 flex items-center justify-start w-full">
-              <div className="w-[34%] shrink-0 pt-[2vw] max-[600px]:pt-[5vw] max-[600px]:w-[30%] h-full">
+              <div className="w-[34%] shrink-0 pt-[calc(var(--u)*2)] max-[600px]:pt-[5vw] max-[600px]:w-[30%] h-full">
                 <p
-                  className="text-[1.65vw] leading-none max-[600px]:text-[4.2vw]"
+                  className="text-[calc(var(--u)*1.65)] leading-none max-[600px]:text-[4.2vw]"
                   style={mutedTextStyle}
                 >
                   {periodLabel}
                 </p>
               </div>
 
-              <div className="w-full flex h-full gap-x-[20vw] ml-[7vw] max-[600px]:gap-x-[40vw] max-[600px]:ml-[7vw]">
+              <div className="w-full flex h-full gap-x-[calc(var(--u)*20)] ml-[calc(var(--u)*7)] max-[600px]:gap-x-[40vw] max-[600px]:ml-[7vw]">
                 {bottomItems.map((item) => {
                   const k = key(item.id);
                   return (
                     <div
                       key={`bottom-${item.id}`}
-                      className="relative h-full w-[25vw] shrink-0 px-[3vw] max-[600px]:w-[70vw] max-[600px]:px-[7vw]"
+                      className="relative h-full w-[calc(var(--u)*25)] shrink-0 px-[calc(var(--u)*3)] max-[600px]:w-[70vw] max-[600px]:px-[7vw]"
                     >
                       <div className="w-full absolute left-0 bottom-[-1%] h-full">
                         <div
@@ -694,21 +701,21 @@ export default function Timeline({
                           style={activeStyle}
                         ></div>
                         <div
-                          className={`size-[1vw] max-[600px]:size-[2.5vw] translate-x-[-50%] relative w-auto aspect-square rounded-full jd-${k}`}
+                          className={`size-[calc(var(--u)*1)] max-[600px]:size-[2.5vw] translate-x-[-50%] relative w-auto aspect-square rounded-full jd-${k}`}
                           style={activeStyle}
                         ></div>
                       </div>
 
                       {/* Starts a little below the line (founder, 2026-11-05: it sat right under it), like the
                           top entries keep clear of it; the connector and dot stay at the bottom. */}
-                      <div className="flex h-full w-full flex-col justify-start space-y-[1vw] pt-[2.6vw]">
+                      <div className="flex h-full w-full flex-col justify-start space-y-[calc(var(--u)*1)] pt-[calc(var(--u)*2.6)]">
                         <h3
-                          className={`title-${k} font-serif text-[2.5vw] leading-none max-[600px]:text-[6.4vw]`}
+                          className={`title-${k} font-serif text-[calc(var(--u)*2.5)] leading-none max-[600px]:text-[6.4vw]`}
                         >
                           {item.year} {item.month}
                         </h3>
                         <p
-                          className={`description-${k} w-[90%] max-w-[30ch] text-[1.1vw] font-medium leading-[1.4] max-[600px]:w-[90%] max-[600px]:text-[4.8vw]`}
+                          className={`description-${k} w-[90%] max-w-[30ch] text-[calc(var(--u)*1.1)] font-medium leading-[1.4] max-[600px]:w-[90%] max-[600px]:text-[4.8vw]`}
                           style={mutedTextStyle}
                         >
                           <EntryText text={item.content} />

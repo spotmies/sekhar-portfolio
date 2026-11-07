@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { timeline, trackRecord, type TimelinePage, type TimelineSpread } from "@/data/portfolio";
+import { achievements, timeline, trackRecord, type TimelinePage, type TimelineSpread } from "@/data/portfolio";
 import { ArrowUpRight } from "@/components/HoverIcons";
+import OpenPlanLogo from "@/components/OpenPlanLogo";
 
 /**
  * Ventures as a book whose opening is tied to scroll position (cover styling
@@ -27,14 +28,23 @@ const TL: TimelineSpread[] = timeline.spreads; // widened: every spread may hold
 const TURNS = TL.length; // leaves that turn after the opening spread (one per timeline spread)
 // Leaves below 1024px, in reading order: the opening spread's two pages, then each half of every period.
 // Each timeline spread is two leaves there: one entry per half, or the same entry on both halves.
-const SLIDES = [S.name, R.name, ...TL.flatMap((p) => [p.entries[0].title, (p.entries[1] ?? p.entries[0]).title])];
+const SLIDES = [S.name, S.name, ...TL.flatMap((p) => [p.entries[0].title, (p.entries[1] ?? p.entries[0]).title])];
 // Spreads above 1024px, for the progress readout.
-const SPREADS = [`${S.name} · ${R.name}`, ...TL.map((p) => p.years ?? p.title)];
+const SPREADS = [S.name, ...TL.map((p) => p.years ?? p.title)];
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const ease = (x: number) => x * x * (3 - 2 * x); // ease in/out
 // Leaf k (1-based) turns in the middle 70% of its screen of scrolling, so each spread rests a moment.
 const leafT = (t: number, k: number) => ease(clamp01((t - (k - 1) - 0.15) / 0.7));
+/* The cover stays shut until the whole book is on screen and pinned, then opens over OPEN screens of scrolling
+   (founder, 2026-11-07: it was already turning as the book came into view, so the cover was never seen whole).
+   A short rest closed, then the turn, then a short rest open before the first page turns. */
+const OPEN = 0.9;
+const coverT = (o: number) => ease(clamp01((o - 0.12) / 0.66));
+// Spotmies' headline numbers (the Achievements section's figures, founder's wording) for the opening spread.
+const SPOT_NUMBERS = achievements.items[0]!.numbers.map((n) => ({ value: `${n.prefix}${n.to}${n.suffix}`, label: n.label }));
+// The Reaidy.io spread also carries what was the Reaidy overview page (founder, 2026-11-07).
+const isReaidy = (sp: TimelineSpread) => sp.entries[0]?.title === R.name;
 
 // Paper textures: grain, fibres (long, thin streaks) and a faint mottle. They were inline SVG noise, but browsers
 // repaint SVG backgrounds whenever their on-screen scale changes, so a turning page was repainted (texture,
@@ -144,7 +154,7 @@ const CSS = `
     transform:rotateY(calc(var(--p) * -180deg)) translateZ(1px)}
   /* scroll room for the turns: measured by the script (--mspace); until then the same formula without the
      measured extras: one turn (0.42 of the screen) for every page but the last */
-  .vb-anim .vb .vb-pinspace{display:block;height:var(--mspace,calc(${SLIDES.length - 1} * 42svh))}
+  .vb-anim .vb .vb-pinspace{display:block;height:var(--mspace,calc(${SLIDES.length - 1} * 42svh + 50svh))}
   .vb-anim .vb .vb-mrow{display:flex}
   /* until the script has painted once, only the first page shows (the pages are stacked, and without the
      script's z-index the last one would be on top) */
@@ -155,7 +165,7 @@ const CSS = `
   @supports not (height:1svh){
     .vb-anim .vb .vb-stick{height:100vh}
     .vb-anim .vb .vb-grid{height:calc(100vh - 76px - 52px)}
-    .vb-anim .vb .vb-pinspace{height:var(--mspace,calc(${SLIDES.length - 1} * 42vh))}
+    .vb-anim .vb .vb-pinspace{height:var(--mspace,calc(${SLIDES.length - 1} * 42vh + 50vh))}
   }
 }
 @media (min-width:1024px){
@@ -200,10 +210,22 @@ const CSS = `
 .vb-pl::before,.vb-pr::before{z-index:1;opacity:var(--sh,0)}
 .vb-pr::before{background:linear-gradient(90deg,rgba(28,25,23,.38),rgba(28,25,23,.12) 45%,transparent 80%)}
 .vb-pl::before{background:linear-gradient(270deg,rgba(28,25,23,.3),rgba(28,25,23,.1) 45%,transparent 80%)}
+/* Side panels beside the closed book (founder, 2026-11-07: the closed book stood alone between two empty sides).
+   Desktop with motion only; they fade and slide out as the cover opens (--p), and are clickable only while shut. */
+.vb-side{display:none}
+@media (min-width:1024px) and (prefers-reduced-motion:no-preference){
+  .vb-side{display:flex;position:absolute;top:0;bottom:64px;width:calc(25% - 2.5rem);flex-direction:column;justify-content:center;gap:28px;
+    pointer-events:none;opacity:clamp(0, calc(1 - var(--p) * 3), 1);will-change:opacity,transform}
+  .vb-side-l{left:0;transform:translateX(calc(var(--p) * -40px))}
+  .vb-side-r{right:0;transform:translateX(calc(var(--p) * 40px))}
+  .vb[data-shut] .vb-side{pointer-events:auto}
+  @keyframes vb-nudge{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
+  .vb-nudge{animation:vb-nudge 1.6s ease-in-out infinite}
+}
 @media (min-width:1024px) and (prefers-reduced-motion:no-preference){
   /* the pin: a spacer after the book adds ~100vh of scroll per turn; the book sticks while it is used up
      (a sticky element cannot move into its parent's padding, so this must be content, not padding) */
-  .vb-pinspace{display:block;height:calc(var(--turns) * 100vh)}
+  .vb-pinspace{display:block;height:calc((var(--turns) + ${OPEN}) * 100vh)}
   .vb-stick{position:sticky;top:72px}
   .vb-spread{position:absolute;inset:0;transform-style:preserve-3d;pointer-events:none}
   .vb-half{position:absolute;top:0;bottom:0;width:50%;pointer-events:auto;backface-visibility:hidden;-webkit-backface-visibility:hidden}
@@ -232,6 +254,7 @@ const CSS_ALL = CSS + `@media (min-width:1024px) and (prefers-reduced-motion:red
 // sans = body (same size/grey as other sections); uppercase mono = small labels.
 const label = "font-mono text-[11px] leading-relaxed tracking-[0.16em] text-muted uppercase";
 const body = "text-[15px] leading-relaxed";
+const sideLabel = "font-mono text-[11px] tracking-[0.2em] text-accent uppercase";
 
 /* ---------- Hand-drawn graphs (pencil on graph paper) ----------
    Only figures with the same unit share a chart. Values are the real figures (lower bounds, "40+").
@@ -422,7 +445,7 @@ type TLPage = TimelinePage;
 /* A photo pinned to the page like a print: white border, a strip of tape, a slight tilt. Placeholders
    (picsum stand-ins until the founder's files arrive) say so in the caption. */
 // `wide`: a 2:1 print for group photos that would lose people at the usual 45:32.
-function PagePhoto({ image, small, tilt = -1.2, wide }: { image: NonNullable<TLPage["image"]>; small?: boolean; tilt?: number; wide?: boolean }) {
+function PagePhoto({ image, small, tilt = -1.2, wide, full }: { image: NonNullable<TLPage["image"]>; small?: boolean; tilt?: number; wide?: boolean; full?: boolean }) {
   const openPreview = React.useContext(PreviewCtx);
   const img = (
     // eslint-disable-next-line @next/next/no-img-element
@@ -430,7 +453,7 @@ function PagePhoto({ image, small, tilt = -1.2, wide }: { image: NonNullable<TLP
   );
   return (
     <figure
-      className={"vb-photo relative w-full bg-white p-2 pb-1.5 shadow-[0_8px_18px_-8px_rgba(0,0,0,.35)] " + (small ? "max-w-[300px]" : "max-w-[400px]")}
+      className={"vb-photo relative w-full bg-white p-2 pb-1.5 shadow-[0_8px_18px_-8px_rgba(0,0,0,.35)] " + (full ? "" : small ? "max-w-[300px]" : "max-w-[400px]")}
       style={{ rotate: `${tilt}deg` }}
     >
       <span aria-hidden="true" className="absolute -top-2.5 left-1/2 h-5 w-20 -translate-x-1/2 rotate-[2deg] bg-[rgba(214,206,190,.75)] shadow-sm" />
@@ -576,7 +599,7 @@ function EntryPage({ pg, id, tilt }: { pg: TLPage; id?: string; tilt: number }) 
 }
 
 /* One entry over both pages. Left: years, type, title, role, line, photo. Right: the work and the outcome. */
-function SoloLeft({ pg, id }: { pg: TLPage; id: string }) {
+function SoloLeft({ pg, id, extra }: { pg: TLPage; id: string; extra?: React.ReactNode }) {
   return (
     <div className="flex w-full flex-col gap-4">
       {pg.years && <p className="font-serif text-5xl leading-none sm:text-6xl">{pg.years}</p>}
@@ -596,13 +619,15 @@ function SoloLeft({ pg, id }: { pg: TLPage; id: string }) {
             <PagePhoto image={pg.image} />
           </div>
         ))}
+      {extra}
     </div>
   );
 }
 
-function SoloRight({ pg }: { pg: TLPage }) {
+function SoloRight({ pg, intro, extra }: { pg: TLPage; intro?: React.ReactNode; extra?: React.ReactNode }) {
   return (
     <div className="flex w-full flex-col gap-6">
+      {intro}
       {pg.whatIDid && pg.whatIDid.length > 0 && <WhatIDid items={pg.whatIDid} />}
       {pg.gallery && pg.gallery.length > 0 && (
         // Extra photos (e.g. Hexagon's boards), side by side and tilted opposite ways like prints taped in.
@@ -620,6 +645,25 @@ function SoloRight({ pg }: { pg: TLPage }) {
           Visit {pg.title} <ArrowUpRight size={12} />
         </a>
       )}
+      {extra}
+    </div>
+  );
+}
+
+/* Headline figures in one row of four, serif numbers over small labels (pencil-free: they are the big ones). */
+function NumberRow({ title, items, note, small }: { title?: string; items: { value: string; label: string }[]; note?: string; small?: boolean }) {
+  return (
+    <div className="w-full">
+      {title && <h4 className={label + " mb-2.5"}>{title}</h4>}
+      <dl className="grid grid-cols-4 gap-x-3 border-y border-border py-3">
+        {items.map((x) => (
+          <div key={x.label} className="flex min-w-0 flex-col">
+            <dt className="order-last mt-1.5 text-[11.5px] leading-snug text-muted">{x.label}</dt>
+            <dd className={"font-serif leading-none tracking-[-0.01em] " + (small ? "text-[26px] sm:text-[30px]" : "text-[30px] sm:text-[36px]")}>{x.value}</dd>
+          </div>
+        ))}
+      </dl>
+      {note && <p className={label + " mt-2"}>{note}</p>}
     </div>
   );
 }
@@ -686,7 +730,7 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
   const goToSpread = (n: number) => {
     const el = ref.current;
     if (!el) return;
-    const y = el.getBoundingClientRect().top + window.scrollY - pinTop.current + n * window.innerHeight;
+    const y = el.getBoundingClientRect().top + window.scrollY - pinTop.current + (n + OPEN) * window.innerHeight;
     window.scrollTo({ top: y, behavior: reduceMotion() ? "auto" : "smooth" });
   };
 
@@ -742,6 +786,7 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
     const N = P.length;
     let segs: { start: number; read: number }[] = [];
     let turn = 400;
+    let openLen = 300; // phones: scrolling over which the cover opens, once the book is pinned
     let mTotal = 0;
     let fit = P.map(() => 1);
     let shownTf = P.map(() => "");
@@ -806,6 +851,7 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
         stick.style.top = "";
         const area = grid.clientHeight;
         turn = Math.round(stick.clientHeight * 0.42);
+        openLen = Math.round(stick.clientHeight * 0.5);
         P.forEach((pg) => {
           pg.style.setProperty("--fit", "1");
           pg.style.minHeight = "0";
@@ -825,7 +871,7 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
           if (!changed) break;
           P.forEach((pg, i) => pg.style.setProperty("--fit", fit[i].toFixed(4)));
         }
-        let acc = 0;
+        let acc = openLen; // the cover opens first
         segs = P.map((pg, i) => {
           const seg = { start: acc, read: Math.max(0, Math.round(pg.offsetHeight * fit[i] - area)) };
           acc += seg.read + (i < N - 1 ? turn : 0);
@@ -861,9 +907,9 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
     // page beneath gets the leaf's shadow. Only the current page and, while it turns, the next one are visible.
     const paintMobile = () => {
       mframe = 0;
-      const vh = window.innerHeight;
-      const bookTop = book.getBoundingClientRect().top;
-      const p = ease(clamp01((vh * 0.95 - bookTop) / (vh * 0.55)));
+      // The cover opens only once the book is pinned (whole book on screen), over the first openLen of scrolling.
+      const s = Math.min(mTotal, Math.max(0, -el.getBoundingClientRect().top));
+      const p = coverT(s / openLen);
       const ps = p.toFixed(3);
       if (ps !== shownCoverP) {
         shownCoverP = ps;
@@ -871,7 +917,6 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
         if (p >= 0.999) cover.dataset.done = "";
         else delete cover.dataset.done;
       }
-      const s = Math.min(mTotal, Math.max(0, -el.getBoundingClientRect().top));
       const y = segs.map((g) => Math.min(g.read, Math.max(0, s - g.start)));
       // The turn uses almost its whole stretch (a short rest at each end), so there's no dead scroll between pages.
       const r = segs.map((g, i) => (i < N - 1 ? ease(clamp01(((s - g.start - g.read) / turn - 0.06) / 0.88)) : 0));
@@ -918,21 +963,21 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
       }
     };
 
-    // ---- Desktop (>= 1024px), unchanged ----
-    // Opening is spread over ~80% of a screen of scrolling:
-    // closed while the book's top is below 95% of the viewport, fully open at 15%.
-    // Then, while pinned, each screen of scrolling turns one leaf.
+    // ---- Desktop (>= 1024px) ----
+    // The book arrives closed and pins; the first OPEN screens of pinned scrolling open the cover, then each
+    // screen of scrolling turns one leaf.
     const target = (): [number, number] => {
       const vh = window.innerHeight;
-      const p = ease(clamp01((vh * 0.95 - book.getBoundingClientRect().top) / (vh * 0.8)));
-      const t = Math.min(TURNS, Math.max(0, (pinTop.current - el.getBoundingClientRect().top) / vh));
-      return [p, t];
+      const o = (pinTop.current - el.getBoundingClientRect().top) / vh;
+      return [coverT(o), Math.min(TURNS, Math.max(0, o - OPEN))];
     };
     const paint = (v: number, t: number) => {
       el.style.setProperty("--p", v.toFixed(4));
       el.style.setProperty("--s", Math.sin(Math.PI * v).toFixed(4));
       if (v >= 0.999) cover.dataset.done = "";
       else delete cover.dataset.done;
+      if (v < 0.2) el.dataset.shut = "";
+      else delete el.dataset.shut;
       let turned = 0;
       let past = 0;
       for (let k = 1; k <= TURNS; k++) {
@@ -1053,13 +1098,49 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
         tabIndex={0}
         onKeyDown={onKey}
       >
+      {/* Beside the closed book (desktop): what's inside, and the headline figures. They fade out as it opens. */}
+      <nav aria-label="Inside the book" className="vb-side vb-side-l">
+        <p className={sideLabel}>Inside this book</p>
+        <ol className="flex flex-col gap-3.5">
+          {[{ years: S.meta?.match(/(?:19|20)\d{2}/)?.[0] ?? "", title: S.name }, ...TL.map((sp) => ({ years: sp.years ?? "", title: sp.title }))].map((it, n) => (
+            <li key={it.title + n}>
+              <button
+                type="button"
+                onClick={() => goToSpread(n)}
+                className="group/toc flex w-full items-baseline gap-3 text-left outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+              >
+                <span className="font-mono text-[11px] tracking-[0.12em] text-accent tabular-nums">{pad2(2 * n + 1)}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-serif text-[19px] leading-tight transition-colors group-hover/toc:text-accent">{it.title}</span>
+                  <span className="mt-0.5 block font-mono text-[10.5px] tracking-[0.12em] text-muted">{it.years}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ol>
+      </nav>
+      <aside aria-label="At a glance" className="vb-side vb-side-r items-end text-right">
+        <p className={sideLabel}>At a glance</p>
+        <dl className="flex flex-col gap-4">
+          {[SPOT_NUMBERS[1]!, SPOT_NUMBERS[3]!, { ...R.metrics.items[0]!, label: `Reaidy.io ${R.metrics.items[0]!.label}` }, { ...R.metrics.items[2]!, label: `${R.metrics.items[2]!.label} on Reaidy.io` }].map((x) => (
+            <div key={x.label} className="flex flex-col items-end">
+              <dt className="order-last mt-1 max-w-[16ch] text-[12.5px] leading-snug text-muted">{x.label}</dt>
+              <dd className="font-serif text-[34px] leading-none tracking-[-0.01em]">{x.value}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className={sideLabel + " inline-flex items-center gap-2"}>
+          Scroll to open <span aria-hidden="true" className="vb-nudge inline-block text-accent">↓</span>
+        </p>
+      </aside>
       <div ref={bookRef} className="vb-book">
         <div aria-hidden="true" className="vb-shadow" />
         <div aria-hidden="true" className="vb-shadow-l" />
         <div aria-hidden="true" className="vb-board" />
         <div aria-hidden="true" className="vb-board-l" />
         <div ref={gridRef} className="vb-grid relative grid lg:grid-cols-2">
-          {/* Left page: Spotmies */}
+          {/* Opening spread: Spotmies over both pages (founder, 2026-11-07; the Reaidy overview moved to its own spread). */}
+          {/* Page 1: who and what, with the founder's team photos */}
           <article id={S.id} data-face="L0" className={"vb-left rounded-2xl lg:rounded-r-none " + pageCls}>
             <span aria-hidden="true" className="vb-head left-6 sm:left-10"><span className="text-accent">01</span> · {S.name}</span>
             <span aria-hidden="true" className="vb-folio left-6 sm:left-10">1</span>
@@ -1073,7 +1154,6 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
                   {S.meta && <p className={label}>{S.meta}</p>}
                 </div>
               </div>
-              {/* The opening pages are full, so the team photo sits beside the heading as a small print. */}
               {S.photo && (
                 <div className="w-[40%] max-w-[220px] shrink-0 pt-1">
                   <PagePhoto image={S.photo} wide={S.photo.wide} tilt={2} small />
@@ -1082,51 +1162,32 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
             </div>
             <p className={body}>{S.summary}</p>
             <Chips title={S.chipsLabel} items={S.chips} />
+            <div>
+              <p className={label}>My part</p>
+              <p className={body + " mt-1"}>{S.owned}</p>
+            </div>
+            {/* full page width, at the foot of the page (founder, 2026-11-07: the page had empty space) */}
+            <div className="mt-1 px-1 lg:mt-auto">
+              <PagePhoto image={S.wallPhoto} wide full tilt={-1} />
+            </div>
+          </article>
+
+          {/* Page 2: the numbers (Achievements figures, then the company figures from spotmies.com) */}
+          <article data-face="R0" className={"vb-right rounded-2xl lg:rounded-l-none " + pageCls}>
+            <span aria-hidden="true" className="vb-head right-6 sm:right-10"><span className="text-accent">02</span> · {S.name}</span>
+            <span aria-hidden="true" className="vb-folio right-6 sm:right-10">2</span>
+            <NumberRow title="By the numbers" items={SPOT_NUMBERS} />
             <Graphs m={S.metrics} kind="spotmies" />
+            {S.support && <p className={body + " text-muted"}>{S.support}</p>}
             {S.metrics.growth && <GrowthLine g={S.metrics.growth} />}
             <p className={label}>
               {S.metrics.scope}
               {S.metrics.asOf && <> · as of {S.metrics.asOf}</>}
             </p>
-            {S.support && <p className={body + " text-muted"}>{S.support}</p>}
-            {/* "Selected work" moved to the Projects section (addendum-02 §2.1) */}
-          </article>
-
-          {/* Right page: Reaidy (also the front of leaf 1 on desktop) */}
-          <article id={R.id} data-face="R0" className={"vb-right rounded-2xl lg:rounded-l-none " + pageCls}>
-            <span aria-hidden="true" className="vb-head right-6 sm:right-10"><span className="text-accent">02</span> · {R.name}</span>
-            <span aria-hidden="true" className="vb-folio right-6 sm:right-10">2</span>
-            <div className="flex items-start gap-4 sm:gap-6">
-              <div className="flex min-w-0 flex-1 flex-col gap-5">
-                <LogoPlate logo={R.logo} h={19} />
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <h3 className="font-serif text-[30px] leading-tight sm:text-[34px]">
-                      <NameLink name={R.name} href={R.href} />
-                    </h3>
-                    <span className={"rounded-full border border-border px-3 py-1 " + label}>{R.status}</span>
-                  </div>
-                  {R.meta && <p className={label}>{R.meta}</p>}
-                </div>
-              </div>
-              {R.photo && (
-                <div className="w-[40%] max-w-[220px] shrink-0 pt-1">
-                  <PagePhoto image={R.photo} wide={R.photo.wide} tilt={-2} small />
-                </div>
-              )}
+            {/* full page width (founder, 2026-11-07: the page had empty space) */}
+            <div className="mt-1 px-1">
+              <PagePhoto image={S.officePhoto} wide full tilt={1} />
             </div>
-            <p className={body}>{R.summary}</p>
-            <Chips title={R.chipsLabel} items={R.chips} />
-            <Graphs m={R.metrics} kind="reaidy" />
-            <p className={label}>
-              {R.metrics.scope}
-              {R.metrics.asOf && <> · as of {R.metrics.asOf}</>}
-            </p>
-            {R.whyStopped && <p className={body}>{R.whyStopped}</p>}
-            {R.support && <p className={body + " text-muted"}>{R.support}</p>}
-            <blockquote className="self-start border-l border-foreground/30 pl-5 lg:mt-auto font-serif text-xl leading-snug sm:text-2xl">
-              &ldquo;{R.lesson}&rdquo;
-            </blockquote>
           </article>
 
           {/* Timeline spreads, newest first (addendum-02 §1; phase 2 content 2026-11-05). Both pages carry content:
@@ -1137,7 +1198,7 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
             const last = n === TURNS;
             const leftNo = 2 * n + 1;
             return (
-              <article key={sp.title} className="vb-spread" aria-labelledby={`vb-tl-${n}`}>
+              <article key={sp.title} id={isReaidy(sp) ? R.id : undefined} className="vb-spread scroll-mt-24" aria-labelledby={`vb-tl-${n}`}>
                 <div
                   data-face={"L" + n}
                   className={"vb-half vb-hl vb-paper vb-pl " + halfCls}
@@ -1148,7 +1209,18 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
                   {sp.entries.length === 2 ? (
                     <EntryPage pg={sp.entries[0]} id={`vb-tl-${n}`} tilt={-1.2} />
                   ) : (
-                    <SoloLeft pg={sp.entries[0]} id={`vb-tl-${n}`} />
+                    <SoloLeft
+                      pg={sp.entries[0]}
+                      id={`vb-tl-${n}`}
+                      // Reaidy's figures (from the old overview page). Its "The product" chips are left out: they repeat
+                      // the line above, and with them the page didn't fit.
+                      extra={isReaidy(sp) ? (
+                        <>
+                          <Chips title={R.chipsLabel} items={R.chips} />
+                          <NumberRow items={R.metrics.items} note={R.metrics.scope} small />
+                        </>
+                      ) : null}
+                    />
                   )}
                 </div>
                 <div
@@ -1158,7 +1230,17 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
                 >
                   <span aria-hidden="true" className="vb-head right-6 sm:right-10"><span className="text-accent">{pad2(leftNo + 1)}</span></span>
                   <span aria-hidden="true" className="vb-folio right-6 sm:right-10">{leftNo + 1}</span>
-                  {sp.entries.length === 2 ? <EntryPage pg={sp.entries[1]} tilt={1.2} /> : <SoloRight pg={sp.entries[0]} />}
+                  {sp.entries.length === 2 ? (
+                    <EntryPage pg={sp.entries[1]} tilt={1.2} />
+                  ) : (
+                    <SoloRight
+                      pg={sp.entries[0]}
+                      intro={isReaidy(sp) ? <p className={body + " max-w-[50ch]"}>{R.summary}</p> : null}
+                      extra={isReaidy(sp) ? (
+                        <blockquote className="self-start border-l border-foreground/30 pl-5 font-serif text-xl leading-snug">&ldquo;{R.lesson}&rdquo;</blockquote>
+                      ) : null}
+                    />
+                  )}
                 </div>
               </article>
             );
@@ -1182,7 +1264,9 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
           <div className="relative flex h-full flex-col justify-between p-8 pl-12 sm:p-12 sm:pl-16">
             <span className="font-mono text-xs tracking-[0.2em] text-[#818cf8] uppercase">{coverKicker}</span>
             <div>
-              <p className="font-serif text-4xl leading-[1.05] sm:text-6xl">{trackRecord.title}</p>
+              {/* founder, 2026-11-07: the cover names OpenPlan AI, with its mark (the section heading stays "Before OpenPlan.") */}
+              <OpenPlanLogo className="mb-6 size-12 text-[#fafaf9] sm:size-14" />
+              <p className="font-serif text-4xl leading-[1.05] sm:text-6xl">Before OpenPlan AI.</p>
               <div className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-5">
                 <CoverLogo logo={S.logo} h={34} />
                 <CoverLogo logo={R.logo} h={22} />
@@ -1190,7 +1274,7 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
             </div>
             <div className="flex items-center justify-between border-t border-white/10 pt-4 font-mono text-[11px] tracking-[0.2em] text-stone-400 uppercase">
               <span>01 · {S.name}</span>
-              <span>02 · {R.name}</span>
+              <span>03 · {R.name}</span>
             </div>
           </div>
         </div>

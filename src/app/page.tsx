@@ -23,6 +23,7 @@ import ContactSection from "@/components/ContactSection";
 import ExperienceSection from "@/components/ExperienceSection";
 import TestimonialsSection from "@/components/TestimonialsSection";
 import EducationSection from "@/components/EducationSection";
+import AchievementsSection from "@/components/AchievementsSection";
 
 const primaryBtn =
   "rounded-full bg-foreground px-6 py-3 text-sm font-medium text-background transition hover:opacity-90"; // step 8: black pill (light) / white pill (dark)
@@ -38,6 +39,9 @@ export default function Home() {
         <Hero />
 
         <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+        {/* 00 Achievements (founder, 2026-11-06): straight after the hero */}
+        <AchievementsSection />
+
         {/* 01 Story */}
         <Section id="story" index="01" eyebrow="Story" title={story.title}>
           <StoryMat chapters={story.chapters} text={story.mat}>

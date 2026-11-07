@@ -12,7 +12,7 @@ const meta = (...parts: (string | null)[]): string | null => parts.filter(Boolea
 const spotmiesCofounders: string | null = null; // e.g. "Satish, Hemanth and Naveen" (needs their OK)
 const spotmiesEndYear: string | null = null; // "present" or the year it ended
 const reaidyTitle: string | null = "Co-Founder & CTO"; // founder, 2026-11-06 (LinkedIn says "Co-Founder"); book only, Experience card unchanged
-const reaidyYears: string | null = "Sep 2023 – Apr 2026"; // LinkedIn (founder OK, 2026-11-05)
+const reaidyYears: string | null = "2024 – 2026"; // founder, 2026-11-07 (was "Sep 2023 – Apr 2026" from LinkedIn). Book only; Experience still starts 2023-09
 
 /** Every field currently hidden because it's null (for the founder's fill-in list). */
 export const hiddenUntilFilled = [
@@ -64,6 +64,7 @@ export const seo = {
    ============================================================================================ */
 
 export const nav = [
+  { label: "Achievements", href: "#achievements" }, // founder, 2026-11-06
   { label: "Story", href: "#story" },
   { label: "Education", href: "#education" }, // founder, 2026-11-04
   { label: "OpenPlan", href: "#openplan" },
@@ -327,6 +328,49 @@ export const metrics = {
   },
 };
 
+// Achievements section (founder, 2026-11-06): wording pasted by the founder. NOTE: the "$1 million ARR" and "team of 25"
+// figures differ from the older master document (approx. USD 200K) and the 25+ post; founder supplied these as current.
+export const achievements = {
+  eyebrow: "Achievements",
+  title: "What the work has added up to.", // TODO founder: confirm heading
+  items: [
+    {
+      kicker: "Company",
+      title: "Built Spotmies from scratch",
+      body: "Co-founded and helped grow a technology company to a team of 25 people, with approximately $1 million in annual recurring revenue, serving more than 30 clients and delivering over 50 software projects.",
+      numbers: [
+        { to: 25, prefix: "", suffix: "", label: "people on the team" },
+        { to: 1, prefix: "~$", suffix: "M", label: "annual recurring revenue" },
+        { to: 30, prefix: "", suffix: "+", label: "clients served" },
+        { to: 50, prefix: "", suffix: "+", label: "software projects delivered" },
+      ],
+    },
+    {
+      kicker: "Programme",
+      title: "NVIDIA Inception Program",
+      body: "Accepted into NVIDIA's startup program.",
+      logo: { src: "/brand/nvidia-logo.svg", darkSrc: "/brand/nvidia-logo-dark.svg", alt: "NVIDIA" } as { src: string; darkSrc?: string; alt: string } | null, // official logo supplied by the founder; the dark file has a white wordmark
+      numbers: [],
+    },
+    {
+      kicker: "Programme",
+      title: "Microsoft for Startups Founders Hub",
+      body: "Accepted into Microsoft's startup support program.",
+      logo: { src: "/brand/microsoft-logo.svg", alt: "Microsoft" } as { src: string; darkSrc?: string; alt: string } | null, // from Wikimedia Commons; grey wordmark works on both themes
+      numbers: [],
+    },
+    {
+      kicker: "Product",
+      title: "AI Product Development & User Growth",
+      body: "Helped build Reaidy, an AI powered hiring platform that reached over 50,000 users and more than 200 hiring companies.",
+      numbers: [
+        { to: 50, prefix: "", suffix: "K+", label: "users" },
+        { to: 200, prefix: "", suffix: "+", label: "hiring companies" },
+      ],
+    },
+  ],
+};
+
 export const trackRecord = {
   label: "04 — Track record",
   title: "Before OpenPlan.",
@@ -340,6 +384,9 @@ export const trackRecord = {
     // Founder's photo for Spotmies (2026-11-05; replaced the office group shot, kept at /ventures/spotmies-office-team.webp).
     // Group photo from IMG_1666 (founder, 2026-11-06; replaced the team-on-steps photo). New file name: browsers cache by name.
     photo: { src: "/ventures/spotmies-team-2026.webp", alt: "The Spotmies team" } as { src: string; alt: string; wide?: boolean } | null,
+    // Founder's photos (2026-11-07) for the two Spotmies pages that open the book. New file names (browser cache).
+    wallPhoto: { src: "/ventures/spotmies-wall-team.webp", alt: "The team at the Spotmies office" },
+    officePhoto: { src: "/ventures/spotmies-office-selfie.webp", alt: "How it started" }, // caption: founder, 2026-11-07
     // Wording taken from the Spotmies chapter and summary (no new claims).
     chipsLabel: "What we built",
     chips: ["Web", "Mobile", "AI", "Blockchain", "Smart contracts", "NFTs", "dApps"],
@@ -408,11 +455,11 @@ export const timeline = {
   skipLabel: "Skip timeline ↓",
   spreads: [
     {
-      years: "2026 — 2023",
+      years: "2026 — 2024", // founder, 2026-11-07 (was 2026 — 2023)
       title: "Reaidy.io",
       entries: [
         {
-          years: "2026 — 2023", // LinkedIn: Co-Founder, Sep 2023 – Apr 2026
+          years: "2026 — 2024", // founder, 2026-11-07: Reaidy.io is 2024–2026 (LinkedIn said Sep 2023 – Apr 2026)
           title: "Reaidy.io",
           type: "product",
           // Wording approved by the founder (2026-11-05); every fact from his LinkedIn posts / Reaidy's company page (research file).
