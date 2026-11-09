@@ -249,7 +249,57 @@
 .rover-stage canvas {
   outline: none;
 }
-
+/* Fig 03 finished state: a small floating label above the CubeSat (positioned by cubesat.ts) */
+.sat-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  font: 500 12.5px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--card) 94%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent) 38%, var(--border));
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  /* no backdrop blur: over a live canvas it re-blurs every frame (costly on phones) */
+  pointer-events: none;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+.sat-callout b {
+  font-weight: 700;
+}
+.sat-callout em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--accent);
+}
+.sat-label-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent);
+}
+@media (max-width: 640px) {
+  .sat-label {
+    font-size: 11px;
+    padding: 6px 10px;
+  }
+}
+@media (max-width: 400px) {
+  .sat-label {
+    gap: 6px;
+    font-size: 10.5px;
+    padding: 5px 9px;
+  }
+}
 /* the information panel: under the viewport by default, beside the rover on wide stages */
 /* the panel is a soft card with an even hairline border, so the story reads as clearly as the model */
 .asm-panel {
@@ -577,5 +627,26 @@
   .asm-rail-pill,
   .asm-panel-track i {
     transition: none;
+  }
+}
+
+/* phones turned sideways: the stage takes the screen height and the panel sits beside it, compact */
+@media (max-height: 520px) and (orientation: landscape) {
+  .rover-stage {
+    aspect-ratio: auto;
+    height: calc(100vh - 84px);
+    max-height: none;
+    min-height: 240px;
+  }
+  .asm-viewport[data-side] .asm-panel {
+    left: 12px;
+    width: 290px;
+    padding: 14px 16px 12px;
+  }
+  .asm-viewport[data-side] .asm-panel-num {
+    font-size: 36px;
+  }
+  .asm-viewport[data-side] .asm-panel-head {
+    padding-bottom: 8px;
   }
 }

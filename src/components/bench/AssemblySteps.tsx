@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { RoverHandle } from "./rover";
+import type { SceneHandle } from "./cubesat";
 import "./iso.css";
 import "./bench.css";
 
@@ -14,12 +14,19 @@ export interface AssemblyStep {
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
+/**
+ * Scroll length of each step, in units of 62vh. Steps 6 (the parts fly into the CubeSat) and 7 (it lifts off,
+ * wings and antennas deploy) carry the most motion, so they get more scroll and play out more slowly.
+ */
+const STEP_WEIGHT = [1, 1, 1, 1, 1, 1.75, 1.6];
+const weightOf = (i: number) => STEP_WEIGHT[i] ?? 1;
+
 /** Width at which the information panel sits beside the rover instead of under it. */
 const SIDE_BY_SIDE = 980;
 
 /**
- * Assembly follows the scroll in both directions: scrolling down assembles the rover, scrolling
- * back up takes it apart again. The on-screen value eases toward the scroll position.
+ * The scene follows the scroll in both directions: scrolling down moves it forward through its seven
+ * states, scrolling back up reverses them. The on-screen value eases toward the scroll position.
  */
 
 /** One statement as the panel shows it (number, label, title, body), with a staggered entrance. */
@@ -50,16 +57,16 @@ function PanelStep({ step, index, total, state }: { step: AssemblyStep; index: n
 }
 
 /**
- * Fig 03. Two stories share one scroll position but stay independent:
- *  · the software story: seven statements (the problem, then what OpenPlan does), shown one at a
- *    time in an information panel with a seven-segment progress bar;
- *  · the hardware story: a rover that goes from a CAD exploded view to fully assembled.
- * No statement is tied to any part of the rover.
+ * Fig 03: "Scattered data → built product". Seven statements (the problem, then what OpenPlan
+ * does) are shown one at a time in an information panel with a seven-segment progress bar; each
+ * statement drives one visual state of the 3D scene in ./cubesat.ts (scattered data tiles → BOM tree
+ * → real parts → a change rippling to its dependents → an assembled, finished CubeSat).
  */
 export default function AssemblySteps({ steps }: { steps: AssemblyStep[] }) {
   const track = React.useRef<HTMLDivElement>(null);
   const [{ active, previous }, setSteps] = React.useState({ active: 0, previous: -1 });
   const N = steps.length;
+  const totalWeight = steps.reduce((sum, _, i) => sum + weightOf(i), 0);
 
   // a short glow on the panel whenever a new step arrives (skipped on the very first render)
   const firstStep = React.useRef(true);
@@ -91,7 +98,7 @@ export default function AssemblySteps({ steps }: { steps: AssemblyStep[] }) {
     const still = window.matchMedia("(prefers-reduced-motion: reduce)");
     const isDark = () => document.documentElement.classList.contains("dark");
 
-    let rover: RoverHandle | null = null;
+    let rover: SceneHandle | null = null;
     let cancelled = false;
     let reading = 0; // where the reader is (0…1): drives the active statement and the assembly
     let p = 0; // smoothed assembly progress shown on screen
@@ -100,13 +107,39 @@ export default function AssemblySteps({ steps }: { steps: AssemblyStep[] }) {
     let shown = -1;
 
     /** Side by side on wide stages: shift the rover right by half the panel's footprint. */
+    // Phones show / hide the address bar while scrolling, which changes the window height by ~50–110px. Centring
+    // on that height made the pinned figure jump mid-scroll, so the height only counts when the width changes or
+    // the height changes a lot (rotation, split screen).
+    let screenW = window.innerWidth;
+    let screenH = window.innerHeight;
+    const stableHeight = () => {
+      if (window.innerWidth !== screenW || Math.abs(window.innerHeight - screenH) > 160) {
+        screenW = window.innerWidth;
+        screenH = window.innerHeight;
+      }
+      return screenH;
+    };
     const layout = () => {
+      const vh = stableHeight();
       // centre the pinned box on screen (never under the navigation bar)
       const minTop = window.innerWidth <= 640 ? 64 : 76;
-      sticky.style.top = `${Math.max(minTop, Math.round((window.innerHeight - sticky.offsetHeight) / 2))}px`;
-      const side = viewport.clientWidth >= SIDE_BY_SIDE;
+      sticky.style.top = `${Math.max(minTop, Math.round((vh - sticky.offsetHeight) / 2))}px`;
+      // also side by side on short landscape screens (phones turned sideways): stacked, the panel would sit off screen
+      const shortLandscape = vh <= 520 && window.innerWidth > vh && viewport.clientWidth >= 600;
+      const side = viewport.clientWidth >= SIDE_BY_SIDE || shortLandscape;
       viewport.toggleAttribute("data-side", side);
       rover?.shift(side ? (panel.offsetWidth + 48) / 2 : 0);
+    };
+
+    /** Scroll reading (0…1) → position in steps (0…N), honouring each step's scroll length. */
+    const toSteps = (r: number) => {
+      let x = clamp(r, 0, 1) * totalWeight;
+      for (let i = 0; i < N; i++) {
+        const w = weightOf(i);
+        if (x <= w) return i + x / w;
+        x -= w;
+      }
+      return N;
     };
 
     const measure = () => {
@@ -117,9 +150,9 @@ export default function AssemblySteps({ steps }: { steps: AssemblyStep[] }) {
       reading = total > 0 ? clamp((pin - rect.top) / total, 0, 1) : 0;
     };
     const draw = () => {
-      rover?.set(p);
+      rover?.set(toSteps(p) / N);
       figure.toggleAttribute("data-done", p >= 0.999);
-      const at = reading * N;
+      const at = toSteps(reading);
       const step = Math.min(N - 1, Math.floor(at));
       // seven segments: past ones full, the active one fills as you read through it
       fills.forEach((fill, i) => {
@@ -141,7 +174,9 @@ export default function AssemblySteps({ steps }: { steps: AssemblyStep[] }) {
       last = now;
       const goal = reading; // assembly tracks the scroll position, down and up
       // eased towards the scroll position in either direction
-      p = still.matches ? goal : p + (goal - p) * (1 - Math.exp(-dt / 0.18));
+      // a slightly calmer follow in the last two steps, where the most parts move at once
+      const lag = toSteps(p) >= 4.8 ? 0.32 : 0.18;
+      p = still.matches ? goal : p + (goal - p) * (1 - Math.exp(-dt / lag));
       if (Math.abs(goal - p) < 0.0004) p = goal;
       draw();
       frame = p !== goal ? requestAnimationFrame(tick) : 0;
@@ -161,9 +196,9 @@ export default function AssemblySteps({ steps }: { steps: AssemblyStep[] }) {
       (entries) => {
         if (!entries.some((e) => e.isIntersecting)) return;
         near.disconnect();
-        import("./rover").then(({ mountRover }) => {
+        import("./cubesat").then(({ mountCubesat }) => {
           if (cancelled) return;
-          rover = mountRover(stage, { dark: isDark() });
+          rover = mountCubesat(stage, { dark: isDark() });
           layout();
           measure();
           p = reading;
@@ -216,10 +251,10 @@ export default function AssemblySteps({ steps }: { steps: AssemblyStep[] }) {
       cancelAnimationFrame(frame);
       rover?.dispose();
     };
-  }, [N]);
+  }, [N, totalWeight]);
 
   return (
-    <div ref={track} className="asm-track" style={{ height: `calc(${N} * 62vh + 100vh)` }}>
+    <div ref={track} className="asm-track" style={{ height: `calc(${totalWeight} * 62vh + 100vh)` }}>
       <div data-sticky="" className="asm-sticky">
         {/* the full story for screen readers; the panel shows one statement at a time */}
         <ol className="sr-only">
@@ -232,7 +267,7 @@ export default function AssemblySteps({ steps }: { steps: AssemblyStep[] }) {
         <figure
           data-figure=""
           className="iso bench asm-figure"
-          aria-label="Fig 03: a six-wheel planetary exploration rover in an exploded engineering view that assembles as you scroll, beside the OpenPlan story."
+          aria-label="Fig 03: scattered product data organises into a bill of materials, becomes the real parts of a small satellite, a part revision ripples to the parts it affects, and the satellite assembles as you scroll, beside the OpenPlan story."
         >
           <div className="iso-plate bench-plate asm-plate">
             <div className="asm-viewport" data-viewport="">
