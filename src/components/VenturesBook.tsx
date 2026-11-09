@@ -45,6 +45,8 @@ const coverT = (o: number) => ease(clamp01((o - 0.12) / 0.66));
 const SPOT_NUMBERS = achievements.items[0]!.numbers.map((n) => ({ value: `${n.prefix}${n.to}${n.suffix}`, label: n.label }));
 // The Reaidy.io spread also carries what was the Reaidy overview page (founder, 2026-11-07).
 const isReaidy = (sp: TimelineSpread) => sp.entries[0]?.title === R.name;
+// The years the book covers, from the timeline itself: the oldest spread's start to the newest spread's start.
+const COVER_SPAN = `${TL[TL.length - 1]!.years?.split(" — ")[0]} — ${TL[0]!.years?.split(" — ")[0]}`;
 
 // Paper textures: grain, fibres (long, thin streaks) and a faint mottle. They were inline SVG noise, but browsers
 // repaint SVG backgrounds whenever their on-screen scale changes, so a turning page was repainted (texture,
@@ -399,7 +401,7 @@ function LogoPlate({ logo, h }: { logo: { src: string; width: number; height: nu
         width={Math.round((logo.width / logo.height) * h)}
         height={h}
         alt={logo.alt}
-        loading="lazy"
+        loading="eager"
         decoding="async"
         className="block"
         style={{ height: h, width: "auto" }}
@@ -417,7 +419,7 @@ function CoverLogo({ logo, h }: { logo: { src: string; width: number; height: nu
       width={Math.round((logo.width / logo.height) * h)}
       height={h}
       alt=""
-      loading="lazy"
+      loading="eager"
       decoding="async"
       className="block"
       style={{ height: h, width: "auto" }}
@@ -448,8 +450,9 @@ type TLPage = TimelinePage;
 function PagePhoto({ image, small, tilt = -1.2, wide, full }: { image: NonNullable<TLPage["image"]>; small?: boolean; tilt?: number; wide?: boolean; full?: boolean }) {
   const openPreview = React.useContext(PreviewCtx);
   const img = (
+    // Not lazy: inside the 3D book the browser skipped these, leaving white frames until they were forced into view.
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={image.src} alt={image.placeholder ? "" : image.alt} loading="lazy" width={wide ? 1000 : 900} height={wide ? 500 : 640} className={"block w-full object-cover " + (wide ? "aspect-[2/1]" : "aspect-[45/32]")} />
+    <img src={image.src} alt={image.placeholder ? "" : image.alt} width={wide ? 1000 : 900} height={wide ? 500 : 640} className={"block w-full object-cover " + (wide ? "aspect-[2/1]" : "aspect-[45/32]")} />
   );
   return (
     <figure
@@ -1276,10 +1279,8 @@ export default function VenturesBook({ coverKicker }: { coverKicker: string }) {
               {/* founder, 2026-11-07: the cover names OpenPlan AI, with its mark (the section heading stays "Before OpenPlan.") */}
               <OpenPlanLogo className="mb-6 size-12 text-[#fafaf9] sm:size-14" />
               <p className="font-serif text-4xl leading-[1.05] sm:text-6xl">Before OpenPlan AI.</p>
-              <div className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-5">
-                <CoverLogo logo={S.logo} h={34} />
-                <CoverLogo logo={R.logo} h={22} />
-              </div>
+              {/* founder, 2026-11-09: the logos come off the cover; the years the book covers stand in their place */}
+              <p className="mt-8 font-serif text-2xl text-stone-300 sm:text-3xl">{COVER_SPAN}</p>
             </div>
             <div className="flex items-center justify-between border-t border-white/10 pt-4 font-mono text-[11px] tracking-[0.2em] text-stone-400 uppercase">
               <span>01 · {S.name}</span>
