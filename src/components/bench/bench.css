@@ -549,7 +549,9 @@
 /* tablet */
 @media (max-width: 1023px) {
   .rover-stage {
-    max-height: calc(100vh - 380px);
+    aspect-ratio: auto;
+    height: min(54vh, 560px);
+    max-height: none;
     min-height: 300px;
   }
   .asm-panel-num {
@@ -589,8 +591,8 @@
   }
   .rover-stage {
     aspect-ratio: auto;
-    height: min(48vh, 86vw);
-    min-height: 250px;
+    height: min(52vh, 86vw);
+    min-height: 260px;
   }
   .asm-panel {
     margin: 4px 16px 0;
@@ -648,5 +650,165 @@
   }
   .asm-viewport[data-side] .asm-panel-head {
     padding-bottom: 8px;
+  }
+}
+
+/* ============================================================================================
+   Fig 03 — wide screens (≥ 1040px): the steps are layer cards on either side of the model, which
+   stays centred between them. Each card appears as its step starts; a connector runs from it to the model.
+   ============================================================================================ */
+.asm-layers {
+  display: none;
+}
+.asm-progress {
+  margin: 6px 20px 0;
+}
+.asm-viewport[data-layers] {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 2.2fr) minmax(0, 0.8fr);
+  column-gap: clamp(1rem, 2vw, 2rem);
+  align-items: stretch;
+}
+/* the model gets the centre: the cards stay narrow so they don't crowd it (founder, 2026-11-09) */
+.asm-viewport[data-layers] .rover-stage {
+  grid-column: 2;
+  grid-row: 1;
+  aspect-ratio: auto;
+  height: min(calc(100vh - 150px), 740px);
+  min-height: 440px;
+  max-height: none;
+}
+.asm-viewport[data-layers] .asm-panel {
+  display: none;
+}
+.asm-viewport[data-layers] .asm-layers {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 0;
+  grid-row: 1;
+}
+.asm-viewport[data-layers] .asm-layers-l {
+  grid-column: 1;
+}
+.asm-viewport[data-layers] .asm-layers-r {
+  grid-column: 3;
+  justify-content: center;
+}
+.asm-viewport[data-layers] .asm-progress {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin: 26px 0 0;
+}
+
+.asm-layer {
+  position: relative;
+  padding: 11px 13px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--card) 80%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 14px 34px -24px rgba(0, 0, 0, 0.45);
+  transition:
+    opacity 600ms var(--ease-std),
+    transform 600ms var(--ease-std),
+    border-color 400ms ease;
+}
+.asm-layer[data-state="hidden"] {
+  opacity: 0;
+  transform: translateY(14px);
+  pointer-events: none;
+}
+.asm-layer[data-state="done"] {
+  opacity: 0.5;
+}
+.asm-layer[data-state="active"] {
+  opacity: 1;
+  border-color: color-mix(in oklab, var(--accent) 60%, var(--border));
+}
+.asm-layer-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+}
+.asm-layer-num {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  line-height: 0.9;
+  color: var(--accent);
+}
+.asm-layer-meta {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.asm-layer-of {
+  opacity: 0.8;
+}
+.asm-layer-title {
+  margin-top: 7px;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.12;
+  text-wrap: balance;
+}
+.asm-layer-body {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.42;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+/* connector: from the card's inner edge across the gap to the model's column, with a dot at the model end */
+.asm-layer-link {
+  position: absolute;
+  top: 50%;
+  width: clamp(1rem, 1.6vw, 1.5rem);
+  height: 1px;
+  background: var(--border);
+  transform: scaleX(0);
+  transition: transform 700ms var(--ease-std) 180ms;
+}
+.asm-layer-link::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.asm-layer-l .asm-layer-link {
+  left: 100%;
+  transform-origin: left center;
+}
+.asm-layer-l .asm-layer-link::after {
+  right: -3px;
+}
+.asm-layer-r .asm-layer-link {
+  right: 100%;
+  transform-origin: right center;
+}
+.asm-layer-r .asm-layer-link::after {
+  left: -3px;
+}
+.asm-layer[data-state="done"] .asm-layer-link,
+.asm-layer[data-state="active"] .asm-layer-link {
+  transform: scaleX(1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .asm-layer,
+  .asm-layer-link {
+    transition: none;
   }
 }

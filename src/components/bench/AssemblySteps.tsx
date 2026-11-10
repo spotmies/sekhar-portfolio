@@ -18,11 +18,11 @@ const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
  * Scroll length of each step, in units of 62vh. Steps 6 (the parts fly into the CubeSat) and 7 (it lifts off,
  * wings and antennas deploy) carry the most motion, so they get more scroll and play out more slowly.
  */
-const STEP_WEIGHT = [1, 1, 1, 1, 1, 1.75, 1.6];
+const STEP_WEIGHT = [1, 1, 1, 1.75, 1.6]; // five steps (2026-11-09): the last two carry the most motion
 const weightOf = (i: number) => STEP_WEIGHT[i] ?? 1;
 
-/** Width at which the information panel sits beside the rover instead of under it. */
-const SIDE_BY_SIDE = 980;
+/** Width from which the steps sit as layer cards on either side of the centred model (founder, 2026-11-09). */
+const LAYERS_MIN = 1040;
 
 /**
  * The scene follows the scroll in both directions: scrolling down moves it forward through its seven
@@ -52,6 +52,26 @@ function PanelStep({ step, index, total, state }: { step: AssemblyStep; index: n
       <p className="asm-panel-body asm-rise" style={{ "--d": "190ms" } as React.CSSProperties}>
         {step.body.charAt(0).toUpperCase() + step.body.slice(1)}
       </p>
+    </div>
+  );
+}
+
+/** One step as a layer card beside the model. Cards appear one after another as their step starts. */
+function LayerCard({ step, index, total, state, side }: { step: AssemblyStep; index: number; total: number; state: "done" | "active" | "hidden"; side: "l" | "r" }) {
+  return (
+    <div className={"asm-layer asm-layer-" + side} data-state={state}>
+      <span className="asm-layer-link" aria-hidden="true" />
+      <div className="asm-layer-head">
+        <span className="asm-layer-num">{pad2(index + 1)}</span>
+        <span className="asm-layer-meta">
+          <span>{step.group}</span>
+          <span className="asm-layer-of">
+            Step {pad2(index + 1)} of {pad2(total)}
+          </span>
+        </span>
+      </div>
+      <h3 className="asm-layer-title">{step.title}</h3>
+      <p className="asm-layer-body">{step.body.charAt(0).toUpperCase() + step.body.slice(1)}</p>
     </div>
   );
 }
@@ -124,11 +144,13 @@ export default function AssemblySteps({ steps }: { steps: AssemblyStep[] }) {
       // centre the pinned box on screen (never under the navigation bar)
       const minTop = window.innerWidth <= 640 ? 64 : 76;
       sticky.style.top = `${Math.max(minTop, Math.round((vh - sticky.offsetHeight) / 2))}px`;
-      // also side by side on short landscape screens (phones turned sideways): stacked, the panel would sit off screen
-      const shortLandscape = vh <= 520 && window.innerWidth > vh && viewport.clientWidth >= 600;
-      const side = viewport.clientWidth >= SIDE_BY_SIDE || shortLandscape;
-      viewport.toggleAttribute("data-side", side);
-      rover?.shift(side ? (panel.offsetWidth + 48) / 2 : 0);
+      // wide screens: the steps are layer cards on either side of the model, which stays centred
+      const layers = viewport.clientWidth >= LAYERS_MIN;
+      // short landscape screens (phones turned sideways): the single panel beside the model, as before
+      const shortLandscape = !layers && vh <= 520 && window.innerWidth > vh && viewport.clientWidth >= 600;
+      viewport.toggleAttribute("data-layers", layers);
+      viewport.toggleAttribute("data-side", shortLandscape);
+      rover?.shift(shortLandscape ? (panel.offsetWidth + 48) / 2 : 0);
     };
 
     /** Scroll reading (0…1) → position in steps (0…N), honouring each step's scroll length. */
@@ -271,7 +293,19 @@ export default function AssemblySteps({ steps }: { steps: AssemblyStep[] }) {
         >
           <div className="iso-plate bench-plate asm-plate">
             <div className="asm-viewport" data-viewport="">
+              {/* wide: layer cards on the left (steps 1, 3, 5, 7) and right (2, 4, 6), the model centred between them */}
+              <div className="asm-layers asm-layers-l" aria-hidden="true">
+                {steps.map((s, i) =>
+                  i % 2 === 0 ? <LayerCard key={s.title} step={s} index={i} total={N} side="l" state={i < active ? "done" : i === active ? "active" : "hidden"} /> : null,
+                )}
+              </div>
               <div className="rover-stage" data-stage="" />
+              <div className="asm-layers asm-layers-r" aria-hidden="true">
+                {steps.map((s, i) =>
+                  i % 2 === 1 ? <LayerCard key={s.title} step={s} index={i} total={N} side="r" state={i < active ? "done" : i === active ? "active" : "hidden"} /> : null,
+                )}
+              </div>
+              {/* narrow screens: one statement at a time under the model */}
               <aside className="asm-panel" data-panel="">
                 {/* every statement sits in one grid cell: the cell is as tall as the longest, so the panel never jumps */}
                 <div className="asm-panel-stack" aria-live="polite">
@@ -285,6 +319,8 @@ export default function AssemblySteps({ steps }: { steps: AssemblyStep[] }) {
                     />
                   ))}
                 </div>
+              </aside>
+              <div className="asm-progress">
                 <div className="asm-panel-track" aria-hidden="true">
                   {steps.map((s, i) => (
                     <span
@@ -300,7 +336,7 @@ export default function AssemblySteps({ steps }: { steps: AssemblyStep[] }) {
                 <p className="asm-panel-remaining" data-remaining="">
                   {N - 1} remaining
                 </p>
-              </aside>
+              </div>
             </div>
           </div>
         </figure>

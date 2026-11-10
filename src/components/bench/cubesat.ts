@@ -808,7 +808,9 @@ export function mountCubesat(host: HTMLElement, { dark }: { dark: boolean }): Sc
   const changedSpec: TileSpec = { ...specs.find((s) => s.id === changed.id)!, rev: changed.revNext, revLit: true };
   const cells = [...specs, changedSpec];
   const atlasRows = Math.ceil(cells.length / COLS);
-  const K = small ? 1.2 : 1.7; // atlas resolution: crisp text on large screens, lighter on phones
+  // atlas resolution: crisp text on large screens (2026-11-09: was 1.7, which looked soft on sharp displays), lighter on
+  // phones. Capped so the atlas stays within a 4096px texture, which every GPU we target accepts.
+  const K = small ? 1.2 : Math.min(2.5, 4096 / (CW * COLS), 4096 / (CH * atlasRows));
   const cw = Math.round(CW * K);
   const ch = Math.round(CH * K);
   const atlasCanvas = document.createElement("canvas");
@@ -1210,7 +1212,7 @@ export function mountCubesat(host: HTMLElement, { dark }: { dark: boolean }): Sc
 
   if (process.env.NODE_ENV !== "production") (window as unknown as { __satScene?: THREE.Scene }).__satScene = scene;
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowEnd ? 1.25 : lite ? 1.5 : 1.75));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowEnd ? 1.25 : lite ? 1.5 : 2)); // 2026-11-09: desktop up to 2× (was 1.75)
   renderer.shadowMap.enabled = !lite;
   renderer.shadowMap.type = small ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;

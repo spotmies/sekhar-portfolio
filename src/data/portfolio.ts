@@ -241,13 +241,11 @@ export const openplan = {
   siteLink: { label: "openplanai.com", href: site.openplanUrl },
   problems: [
     { title: "Product data is scattered.", body: "Parts, BOMs and revisions live across spreadsheets and disconnected tools." },
-    { title: "Changes are hard to control.", body: "Engineering changes move through email and chat, with no clear history." },
-    { title: "Visibility comes late.", body: "As a product evolves, teams struggle to see what a change touches." },
+    { title: "Changes are hard to control.", body: "Engineering changes move through email and chat, with no clear history, so teams struggle to see what a change touches." }, // merged 2026-11-09 (founder OK, option B)
   ],
   capabilities: [
-    { title: "BOM management", body: "parts, assemblies, components and sub-components in one structure." },
+    { title: "BOM and lifecycle", body: "parts, assemblies and sub-components in one structure, with product information organised across development." }, // merged 2026-11-09 (founder OK, option B)
     { title: "Engineering change orders", body: "track and control every product change." },
-    { title: "Lifecycle workflows", body: "organise product information and development activity." },
     { title: "Connected project work", body: "tasks linked to the parts and changes they affect." },
   ],
   whyMe: "I started in hardware and spent seven years building software. OpenPlan is where the two meet.",
